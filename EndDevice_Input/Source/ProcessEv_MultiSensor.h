@@ -48,7 +48,6 @@ typedef struct {
 	bool_t bSnsEnable;		// 該当のセンサが有効かどうか
 	tsSnsObj sSnsObj;		// センサの管理構造体
 	void* tsObjData;		// センサの読み値などを入れる構造体
-//	void (*SnsInit)( );	// センサの初期化をする関数
 } tsSnsObjAll;
 
 /****************************************************************************/

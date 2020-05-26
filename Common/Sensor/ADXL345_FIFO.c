@@ -68,6 +68,21 @@ bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency )
 	uint8 com;
 
 	switch( u16SamplingFreqency ){
+	case 1:
+		com = 0x04;		//	1.56Hz Sampling frequency
+		break;
+	case 3:
+		com = 0x05;		//	3.13Hz Sampling frequency
+		break;
+	case 6:
+		com = 0x06;		//	6.25Hz Sampling frequency
+		break;
+	case 12:
+		com = 0x07;		//	12.5Hz Sampling frequency
+		break;
+	case 25:
+		com = 0x08;		//	25Hz Sampling frequency
+		break;
 	case 50:
 		com = 0x09;		//	50Hz Sampling frequency
 		break;

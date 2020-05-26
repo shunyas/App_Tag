@@ -94,22 +94,22 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 //			com = 0x15;		//	Low Power Mode, 3.13Hz Sampling frequency
 //			break;
 		case 6:
-			com = 0x16;		//	Low Power Mode, 6.25Hz Sampling frequency
+			com = 0x06;		//	Low Power Mode, 6.25Hz Sampling frequency
 			break;
 		case 12:
-			com = 0x17;		//	Low Power Mode, 12.5Hz Sampling frequency
+			com = 0x07;		//	Low Power Mode, 12.5Hz Sampling frequency
 			break;
 		case 25:
 			com = 0x18;		//	Low Power Mode, 25Hz Sampling frequency
 			break;
 		case 50:
-			com = 0x19;		//	Low Power Mode, 50Hz Sampling frequency
+			com = 0x09;		//	Low Power Mode, 50Hz Sampling frequency
 			break;
 		case 100:
-			com = 0x1A;		//	Low Power Mode, 100Hz Sampling frequency
+			com = 0x0A;		//	Low Power Mode, 100Hz Sampling frequency
 			break;
 		case 200:
-			com = 0x1B;		//	Low Power Mode, 200Hz Sampling frequency
+			com = 0x0B;		//	Low Power Mode, 200Hz Sampling frequency
 			break;
 		case 400:
 			com = 0x0C;		//	400Hz Sampling frequency
@@ -128,7 +128,11 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 			break;
 		}
 	}else{
-		com = 0x19;		//	50Hz Sampling frequency
+		if( u16modeflag == NORMAL ){
+			com = 0x19;		//	50Hz Sampling frequency
+		}else{
+			com = 0x09;		//	50Hz Sampling frequency
+		}
 	}
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 

@@ -392,14 +392,14 @@ static void vInitHardware(int f_warm_start) {
 	vPortSetHi( PORT_OUT1 );
 	vPortAsOutput( PORT_OUT1 );
 
+	bAHI_DoEnableOutputs(TRUE);
+	vAHI_DoSetDataOut( 0x01<<1, 0 );
+
 #ifdef USE_MONOSTICK
 	vPortSetLo(11);				// 外部のウォッチドッグを有効にする。
 	vPortSet_TrueAsLo(9, bVwd);	// VWDをいったんHiにする。
 	vPortAsOutput(11);			// DIO11を出力として使用する。
 	vPortAsOutput(9);			// DIO9を出力として使用する。
-
-	bAHI_DoEnableOutputs(TRUE);
-	vAHI_DoSetDataOut( 0x01<<1, 0 );
 #else
 	vPortSetHi( PORT_OUT2 );
 	vPortAsOutput( PORT_OUT2 );
@@ -1543,10 +1543,15 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16x = G_BE_WORD();
 		int16 i16y = G_BE_WORD();
 		int16 i16z = G_BE_WORD();
-		uint8 u8bitmap = G_OCTET();
+		uint8 u8mode = G_OCTET();
 
-		A_PRINTF( ";"
-			"%d;"			// TIME STAMP
+		if( u8mode == 0xFA ){
+			A_PRINTF( ";%d.%02d;", u32TickCount_ms / 1000, (u32TickCount_ms % 1000)/10 );
+		}else{
+			A_PRINTF(";%d;", u32TickCount_ms / 1000 );
+		}
+
+		A_PRINTF(
 			"%08X;"			// 受信機のアドレス
 			"%03d;"			// LQI  (0-255)
 			"%03d;"			// 連番
@@ -1559,14 +1564,14 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 			"%0c;"			// パケット識別子
 			"%04d;"			// x
 			"%04d;"			// y
-			"%04d;",		// z
-			u32TickCount_ms / 1000,
+			"%04d;"			// z
+			LB,
 			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
 			sRxPktInfo.u8lqi_1st,
 			sRxPktInfo.u16fct,
 			sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
 			DECODE_VOLT(u8batt),
-			u8bitmap,
+			u8mode,
 			0,
 			u16adc1,
 			u16adc2,
@@ -1576,17 +1581,21 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 			i16z
 		);
 
-		if(u8bitmap == 0xfa){
+		//uint32 u32CkSum = i16x+i16y+i16z;
+
+		if(u8mode == 0xFA){
 			uint8 u8num = G_OCTET();
 			uint8 i;
 			for( i=0; i<u8num-1; i++ ){
 				i16x = G_BE_WORD();
 				i16y = G_BE_WORD();
 				i16z = G_BE_WORD();
-				A_PRINTF( "%04d;%04d;%04d;", i16x, i16y, i16z );
+				A_PRINTF( ";;;;;;;;;;;;%04d;%04d;%04d;"LB, i16x, i16y, i16z );
+				//u32CkSum = i16x+i16y+i16z;
 			}
+			//A_PRINTF("%08X", u32CkSum);
 		}
-		A_PRINTF(LB);
+		//A_PRINTF(LB);
 
 #ifdef USE_LCD
 		// LCD への出力
@@ -2268,7 +2277,7 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 					case PKT_ID_TSL2561:
 					{
 						uint32	u32lux = G_BE_DWORD();
-						S_OCTET(u32lux);
+						S_BE_DWORD(u32lux);
 					}
 					break;
 					case PKT_ID_S1105902:

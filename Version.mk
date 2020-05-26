@@ -6,7 +6,7 @@
 
 VERSION_MAIN = 2
 VERSION_SUB  = 0
-VERSION_VAR  = 2
+VERSION_VAR  = 3
 
 # 2.0.2 複数センサ対応
 # 2.0.1 Routerの接続先指定をできるように変更

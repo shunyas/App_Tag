@@ -158,7 +158,7 @@ endif
 # 下記に指定したディレクトリがソース検索パス、インクルード検索パスに設定
 # されます。Makefile のあるディレクトリからの相対パスを指定します。
 #
-APP_COMMON_SRC_DIR_ADD1 = ../../Common/Sensor  
+APP_COMMON_SRC_DIR_ADD1 = ../../Common/Sensor
 #APP_COMMON_SRC_DIR_ADD2 = 
 #APP_COMMON_SRC_DIR_ADD3 = 
 #APP_COMMON_SRC_DIR_ADD4 =

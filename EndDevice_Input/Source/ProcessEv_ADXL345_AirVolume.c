@@ -447,11 +447,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			vPortSet_TrueAsLo( PORT_INPUT1, PortState );
 			vPortSet_TrueAsLo( LED, PortState );
 		}else{
-#ifdef LITE2525A
-			vPortSetLo(PORT_INPUT1);
-#else
-			vPortSetHi(PORT_INPUT1);
-#endif
 			LED_OFF(LED);
 
 			i16diff = 0;

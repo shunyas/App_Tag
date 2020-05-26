@@ -68,8 +68,7 @@ bool_t bADXL345_LowEnergy_Setting()
 {
 	bool_t bOk = TRUE;
 
-//	uint8 com = 0x19;		//	Low Power Mode, 50Hz Sampling frequency
-	uint8 com = 0x0A;		//	Low Power Mode, 50Hz Sampling frequency
+	uint8 com = 0x0A;		//	100Hz Sampling frequency
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
