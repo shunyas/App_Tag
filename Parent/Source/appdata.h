@@ -33,6 +33,8 @@ typedef struct {
 	tsFlash sFlash; //!< フラッシュの情報
 	bool_t bFlashLoaded;
 	uint8 u8DebugLevel;
+
+	uint8 u8DO_State;	//	DOの状態(0:Hi, 1:Lo, それ以外:未定義)
 } tsAppData_Pa;
 extern tsAppData_Pa sAppData;
 

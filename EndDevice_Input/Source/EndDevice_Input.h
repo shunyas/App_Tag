@@ -95,10 +95,13 @@ extern void *pvProcessEv1, *pvProcessEv2;
 extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 
 void vInitAppStandard();
+void vInitAppBotton();
 void vInitAppSHT21();
 void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();
+
+void vPortSetSns(bool_t bActive);
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/

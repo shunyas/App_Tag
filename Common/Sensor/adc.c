@@ -240,12 +240,11 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 				pObj->ai16Result[TEH_ADC_IDX_VOLT] =
 					(int32)(i16AdcVal) * 100L / 114L; // in mV
 #elif defined(JN516x)
-				// TWE-Lite では、測定域が拡張されているようで、上記の計算では誤差が発生する。
-				// 以下の計算式は東京コスモス電機が独自に分析したもので統計に基づく正確性は保証しない。
-				// V[mV] = (AdcVal[12bit]+138)/1127
-				// 256*V = 227*AdcVal+31347
-				pObj->ai16Result[TEH_ADC_IDX_VOLT]
-					= ((int32)i16AdcVal * 227 + 31347L) >> 8;
+				// TWE-Lite 用
+				// データシートの情報に基づくなら、2/3 に分圧されていますから、
+				// 10bit最大を 2470mV として mV 値に変換した上、1.5 倍する計算
+				// を行います。
+				pObj->ai16Result[TEH_ADC_IDX_VOLT] = ((int32)(i16AdcVal) * 3705) >> 12;
 #endif
 			} else
 			// 内蔵温度センサーの変換 (ADCVAL -> 100x degC 23.55℃なら 2355 に変換する)

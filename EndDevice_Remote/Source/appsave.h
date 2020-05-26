@@ -25,6 +25,7 @@ typedef struct _tsFlashApp {
 
 	uint32 u32EncKey;		//!< 暗号化キー(128bitだけど、32bitの値から鍵を生成)
 	uint32 u32Opt;			//!< 色々オプション
+	int16 i16param;
 } tsFlashApp;
 
 

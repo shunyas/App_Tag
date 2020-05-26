@@ -35,7 +35,8 @@ typedef struct _tsFlashApp {
 	uint8 u8id;				//!< 論理ＩＤ (子機 1～100まで指定)
 	uint8 u8ch;				//!< チャネル（未使用、チャネルマスクに指定したチャネルから選ばれる）
 	uint8 u8pow;			//!< 出力パワー (0-3)
-	uint8 u8dummy;			//!< ダミー
+
+	uint8 u8wait;			//!< センサーの時間待ち
 
 	uint32 u32Slp;			//!< スリープ周期
 
@@ -43,6 +44,9 @@ typedef struct _tsFlashApp {
 	uint32 u32Opt;			//!< 色々オプション
 
 	uint16 u16RcClock;		//!< RCクロックキャリブレーション
+
+	uint8 u8mode;			//!< センサの種類
+	int16 i16param;		//!< 選択したセンサ特有のパラメータ
 } tsFlashApp;
 
 

@@ -1,7 +1,13 @@
 VERSION_MAIN = 1
-VERSION_SUB  = 2
-VERSION_VAR  = 2
+VERSION_SUB  = 3
+VERSION_VAR  = 0
 
+# 1.3.0 ソース公開版
+# 1.2.7 初回リリース版
+# 1.2.6 Parent: タイムスタンプ出力機能の追加, DOOR_TIMER: ドアを閉じたときにパケットが送られやすくした
+# 1.2.5 Parent: UART 出力形式を追加
+# 1.2.4 EndDevice Input: Standard で起床後にしばらく待ちを置く処理を追加 (DIO4 はLOに落ちてから、一定時間待つ)
+# 1.2.3 EndDevice Input: DO3(DIO4) の出力が、起床時のみの問題を修正
 # 1.2.2 ソースコードメンテ
 # 1.2.1 UART 送信デモ対応, SimpleTagV3形式出力, B/O検出無効化
 # 1.1.1 SHT21 センサー対応

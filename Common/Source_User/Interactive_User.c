@@ -40,6 +40,9 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 #ifdef ENDDEVICE_INPUT
 	p->u16RcClock = 10000;
 	p->u32Slp = DEFAULT_SLEEP_DUR_ms;
+	p->u8wait = 30;
+	p->u8mode = 0x10;
+	p->i16param = 0;
 #endif
 
 	p->u32Opt = E_APPCONF_OPT_TO_ROUTER; // デフォルトの設定ビット

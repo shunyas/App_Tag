@@ -55,7 +55,7 @@
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
 #define TOCONET_DEBUG_LEVEL 0
-#define USE_LCD
+//#define USE_LCD
 
 #ifdef USE_LCD
 #include "LcdDriver.h"
@@ -76,11 +76,16 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vInitHardware(int f_warm_start);
 static void vSerialInit(uint32 u32Baud, tsUartOpt *pUartOpt);
 
-void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcvr, uint8 *p);
-void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcvr, uint8 *p);
+void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p);
+void vSerOutput_SmplTag3(tsRxPktInfo sRxPktInfo, uint8 *p);
+void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p);
+
+void vSerOutput_Secondary();
 
 void vSerInitMessage();
 void vProcessSerialCmd(tsSerCmd_Context *pCmd);
+
+void vLED_Toggle(void);
 
 #ifdef USE_LCD
 static void vLcdInit(void);
@@ -207,6 +212,8 @@ void cbToCoNet_vNwkEvent(teEvent eEvent, uint32 u32arg) {
  * @param pRx 受信データ構造体
  */
 void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
+	tsRxPktInfo sRxPktInfo;
+
 	uint8 *p = pRx->auData;
 
 	// 暗号化対応時に平文パケットは受信しない
@@ -225,31 +232,44 @@ void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		sAppData.u16LedDur_ct = 125;
 
 		// 基本情報
-		uint8 u8lqi_1st = pRx->u8Lqi;
-		uint32 u32addr_1st = pRx->u32SrcAddr;
+		sRxPktInfo.u8lqi_1st = pRx->u8Lqi;
+		sRxPktInfo.u32addr_1st = pRx->u32SrcAddr;
 
 		// データの解釈
 		uint8 u8b = G_OCTET();
 
 		// 受信機アドレス
-		uint32 u32addr_rcvr = TOCONET_NWK_ADDR_PARENT;
+		sRxPktInfo.u32addr_rcvr = TOCONET_NWK_ADDR_PARENT;
 		if (u8b == 'R') {
 			// ルータからの受信
-			u32addr_1st = G_BE_DWORD();
-			u8lqi_1st = G_OCTET();
+			sRxPktInfo.u32addr_1st = G_BE_DWORD();
+			sRxPktInfo.u8lqi_1st = G_OCTET();
 
-			u32addr_rcvr = pRx->u32SrcAddr;
+			sRxPktInfo.u32addr_rcvr = pRx->u32SrcAddr;
+		}
+
+		// ID などの基本情報
+		sRxPktInfo.u8id = G_OCTET();
+		sRxPktInfo.u16fct = G_BE_WORD();
+
+		// パケットの種別により処理を変更
+		sRxPktInfo.u8pkt = G_OCTET();
+
+		if( sRxPktInfo.u8pkt == PKT_ID_BOTTON ){
+			vLED_Toggle();
 		}
 
 		// 出力用の関数を呼び出す
 		if (IS_APPCONF_OPT_SHT21()) {
-			vSerOutput_SmplTag3(u8lqi_1st, u32addr_1st, u32addr_rcvr, p);
+			vSerOutput_SmplTag3( sRxPktInfo, p);
+		} else if (IS_APPCONF_OPT_UART()) {
+			vSerOutput_Uart(sRxPktInfo, p);
 		} else {
-			vSerOutput_Standard(u8lqi_1st, u32addr_1st, u32addr_rcvr, p);
+			vSerOutput_Standard(sRxPktInfo, p);
 		}
 
 		// データベースへ登録（線形配列に格納している）
-		ADDRKEYA_vAdd(&sEndDevList, u32addr_1st, 0); // アドレスだけ登録。
+		ADDRKEYA_vAdd(&sEndDevList, sRxPktInfo.u32addr_1st, 0); // アドレスだけ登録。
 	}
 }
 
@@ -272,8 +292,6 @@ void cbToCoNet_vTxEvent(uint8 u8CbId, uint8 bStatus) {
  * @param u32ItemBitmap
  */
 void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
-	//static uint32 u32LastTickPressed = 0;
-	//uint32 bmPorts, bmChanged;
 
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
@@ -281,10 +299,10 @@ void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		if (sAppData.u16LedDur_ct) {
 			sAppData.u16LedDur_ct--;
 			if (sAppData.u16LedDur_ct) {
-				vPortSet_TrueAsLo(PORT_KIT_LED1, TRUE);
+				vPortSet_TrueAsLo(PORT_OUT2, TRUE);
 			}
 		} else {
-			vPortSet_TrueAsLo(PORT_KIT_LED1, FALSE);
+			vPortSet_TrueAsLo(PORT_OUT2, FALSE);
 		}
 
 		break;
@@ -292,6 +310,7 @@ void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	default:
 		break;
 	}
+
 }
 
 /**
@@ -364,14 +383,11 @@ static void vInitHardware(int f_warm_start) {
 	ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
 	// IO の設定
-	vPortAsOutput(PORT_KIT_LED1);
-	vPortAsOutput(PORT_KIT_LED2);
-	vPortAsOutput(PORT_KIT_LED3);
-	vPortAsOutput(PORT_KIT_LED4);
-	vPortSetHi(PORT_KIT_LED1);
-	vPortSetHi(PORT_KIT_LED2);
-	vPortSetHi(PORT_KIT_LED3);
-	vPortSetHi(PORT_KIT_LED4);
+	vPortSetHi( PORT_OUT1 );
+	vPortAsOutput( PORT_OUT1 );
+
+	vPortSetHi( PORT_OUT2 );
+	vPortAsOutput( PORT_OUT2 );
 
 	// LCD の設定
 #ifdef USE_LCD
@@ -459,6 +475,9 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			static uint8 u8Ct_s = 0;
 			int i;
 
+			// 毎秒ごとのシリアル出力
+			vSerOutput_Secondary();
+
 			// 定期クリーン（タイムアウトしたノードを削除する）
 			ADDRKEYA_bFind(&sEndDevList, 0, 0);
 
@@ -506,10 +525,31 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
  * 初期化メッセージ
  */
 void vSerInitMessage() {
-	A_PRINTF(LB "*** " APP_NAME " (Parent) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-	A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d" LB,
-			sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
-			sAppData.sFlash.sData.u8id);
+	if (!IS_APPCONF_OPT_UART()) {
+		A_PRINTF(LB "*** " APP_NAME " (Parent) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+		A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d" LB,
+				sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
+				sAppData.sFlash.sData.u8id);
+	} else {
+		uint8 u8buff[32], *q = u8buff;
+
+		memset(u8buff, 0, sizeof(u8buff));
+		memcpy(u8buff, APP_NAME, sizeof(APP_NAME));
+		q += 16;
+
+		S_OCTET(VERSION_MAIN);
+		S_OCTET(VERSION_SUB);
+		S_OCTET(VERSION_VAR);
+		S_BE_DWORD(sToCoNet_AppContext.u32AppId);
+		S_BE_DWORD(ToCoNet_u32GetSerial());
+
+		sSerCmdOut.u16len = q - u8buff;
+		sSerCmdOut.au8data = u8buff;
+
+		sSerCmdOut.vOutput(&sSerCmdOut, &sSerStream);
+
+		sSerCmdOut.au8data = NULL;
+	}
 
 #ifdef USE_LCD
 	// 最下行を表示する
@@ -521,27 +561,47 @@ void vSerInitMessage() {
 /**
  * 標準の出力
  */
-void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcvr, uint8 *p) {
-	// ID などの基本情報
-	uint8 u8id = G_OCTET();
-	uint16 u16fct = G_BE_WORD();
-
+void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 	// 受信機のアドレス
-	A_PRINTF("::rc=%08X", u32addr_rcvr);
+	A_PRINTF("::rc=%08X", sRxPktInfo.u32addr_rcvr);
 
 	// LQI
-	A_PRINTF(":lq=%d", u8lqi_1st);
+	A_PRINTF(":lq=%d", sRxPktInfo.u8lqi_1st);
 
 	// フレーム
-	A_PRINTF(":ct=%04X", u16fct);
+	A_PRINTF(":ct=%04X", sRxPktInfo.u16fct);
 
 	// 送信元子機アドレス
-	A_PRINTF(":ed=%08X:id=%X", u32addr_1st, u8id);
+	A_PRINTF(":ed=%08X:id=%X", sRxPktInfo.u32addr_1st, sRxPktInfo.u8id);
 
-	// パケットの種別により処理を変更
-	uint8 u8pkt = G_OCTET();
+	switch(sRxPktInfo.u8pkt) {
+	case PKT_ID_BOTTON:
+		_C {
+			uint8 u8batt = G_OCTET();
 
-	switch(u8pkt) {
+			uint16 u16adc1 = G_BE_WORD();(void)u16adc1;
+			uint16 u16adc2 = G_BE_WORD();(void)u16adc2;
+
+			uint8 u8mode = G_OCTET();(void)u8mode;
+
+			// センサー情報
+			A_PRINTF(":ba=%04d:bt=%04d" LB,
+					DECODE_VOLT(u8batt), sAppData.u8DO_State );
+
+#ifdef USE_LCD
+			// LCD への出力
+			V_PRINTF_LCD("%03d:%08X:%03d:%02X:P:%04d:%04d:\n",
+					u32sec % 1000,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
+					sAppData.u8DO_State
+					);
+			vLcdRefresh();
+#endif
+		}
+		break;
+
 	case PKT_ID_STANDARD:
 		_C {
 			uint8 u8batt = G_OCTET();
@@ -556,12 +616,47 @@ void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 					DECODE_VOLT(u8batt), u16adc1, u16adc2, u16pc1, u16pc2);
 
 #ifdef USE_LCD
-			// LCD への出力
-			V_PRINTF_LCD("%03d:%08X:%03d:%02X:A:%04d:%04d\n",
+			// LCD への出力:
+			V_PRINTF_LCD("%03d:%08X:%03d:%02X:A:%04d:%04d:%04d\n",
 					u32sec % 1000,
-					u32addr_1st,
-					u8lqi_1st,
-					u16fct & 0xFF,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
+					u16adc1,
+					u16adc2
+					);
+			vLcdRefresh();
+#endif
+		}
+		break;
+
+	case PKT_ID_LM61:
+		_C {
+			uint8 u8batt = G_OCTET();
+
+			uint16	u16adc1 = G_BE_WORD();
+			uint16	u16adc2 = G_BE_WORD();
+			uint16	u16pc1 = G_BE_WORD();(void)u16pc1;
+			uint16	u16pc2 = G_BE_WORD();(void)u16pc2;
+			int		bias = G_BE_WORD();
+
+			// LM61用の温度変換
+			//   Vo=T[℃]x10[mV]+600[mV]
+			//   T     = Vo/10-60
+			//   100xT = 10xVo-6000
+			int32 iTemp = 10 * (int32)u16adc2 - 6000L + bias;
+
+			// センサー情報
+			A_PRINTF(":ba=%04d:te=%04d:a0=%04d:a1=%03d" LB,
+					DECODE_VOLT(u8batt), iTemp, u16adc1, u16adc2);
+
+#ifdef USE_LCD
+			// LCD への出力
+			V_PRINTF_LCD("%03d:%08X:%03d:%02X:A:%04d:%04d:%04d\n",
+					u32sec % 1000,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
 					u16adc1,
 					u16adc2
 					);
@@ -586,9 +681,9 @@ void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 			// LCD への出力
 			V_PRINTF_LCD("%03d:%08X:%03d:%02X:S:%04d:%04d\n",
 					u32sec % 1000,
-					u32addr_1st,
-					u8lqi_1st,
-					u16fct & 0xFF,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
 					i16temp,
 					i16humd
 					);
@@ -601,15 +696,15 @@ void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 			uint8 u8stat = G_OCTET();
 			uint32 u32dur = G_BE_DWORD();
 
-			A_PRINTF(":btn=%d:dur=%d::" LB, u8stat, u32dur / 1000);
+			A_PRINTF(":btn=%d:dur=%d" LB, u8stat, u32dur / 1000);
 
 #ifdef USE_LCD
 			// LCD への出力
 			V_PRINTF_LCD("%03d:%08X:%03d:%02X:B:%04d:%04d\n",
 					u32sec % 1000,
-					u32addr_1st,
-					u8lqi_1st,
-					u16fct & 0xFF,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
 					u8stat,
 					u32dur / 1000
 					);
@@ -634,28 +729,90 @@ void vSerOutput_Standard(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 	default:
 		break;
 	}
-
 }
 
 /**
  * SimpleTag v3 互換 (SHT21 用) の出力
  */
-void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcvr, uint8 *p) {
-	// ID などの基本情報
-	uint8 u8id = G_OCTET(); (void)u8id;
-	uint16 u16fct = G_BE_WORD();
+void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
+	//	押しボタン
+	if ( sRxPktInfo.u8pkt == PKT_ID_BOTTON ) {
+		uint8 u8batt = G_OCTET();
+		uint16 u16adc1 = G_BE_WORD();
+		uint16 u16adc2 = G_BE_WORD();
+		uint8 u8mode = G_OCTET();
+		uint8 DI_Bitmap = G_OCTET();
 
-	// パケットの種別により処理を変更
-	uint8 u8pkt = G_OCTET();
+		//	Bitmapを二進数に変換
+		uint16 bitmap=0;
+		//	DI4に入力があるかどうか
+		if( DI_Bitmap & 8 ){
+			bitmap += 1000;
+		}
+		//	AI3に入力があるかどうか
+		if( DI_Bitmap & 4 ){
+			bitmap += 100;
+		}
+		//	DI2に入力があるかどうか
+		if( DI_Bitmap & 2 ){
+			bitmap += 10;
+		}
+		//	AI1に入力があるかどうか
+		if( DI_Bitmap & 1 ){
+			bitmap += 1;
+		}
 
-	if (u8pkt == PKT_ID_SHT21) {
+		A_PRINTF( ";"
+				"%d;"			// TIME STAMP
+				"%08X;"			// 受信機のアドレス
+				"%03d;"			// LQI  (0-255)
+				"%03d;"			// 連番
+				"%07x;"			// シリアル番号
+				"%04d;"			// 電源電圧 (0-3600, mV)
+				"%04d;"			// ADC1
+				"%04d;"			// ADC2
+				"%04d;"			// 立ち上がりモード
+				"%04d;"			//
+				"%c;"			// 押しボタンフラグ
+				"%04d;"			// ボタンの状態(LEDが光れば1、消えれば0)
+				LB,
+				u32TickCount_ms / 1000,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+				DECODE_VOLT(u8batt),
+				u16adc1,
+				u16adc2,
+				u8mode,
+				bitmap,
+				'P',
+//				u8btn
+				sAppData.u8DO_State
+		);
+
+#ifdef USE_LCD
+		// LCD への出力
+		V_PRINTF_LCD("%03d:%08X:%03d:%02X:P:%04d:%04d:\n",
+				u32sec % 1000,
+				sRxPktInfo.u32addr_1st,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct & 0xFF,
+//				u8btn
+				sAppData.u8DO_State
+				);
+		vLcdRefresh();
+#endif
+	}
+
+	if (sRxPktInfo.u8pkt == PKT_ID_SHT21) {
 		uint8 u8batt = G_OCTET();
 		uint16 u16adc1 = G_BE_WORD();
 		uint16 u16adc2 = G_BE_WORD(); (void)u16adc2;
 		int16 i16temp = G_BE_WORD();
 		int16 i16humd = G_BE_WORD();
 
-		vfPrintf(&sSerStream, ";"
+		A_PRINTF( ";"
 				"%d;"			// TIME STAMP
 				"%08X;"			// 受信機のアドレス
 				"%03d;"			// LQI  (0-255)
@@ -668,10 +825,10 @@ void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 				"%04d;"			// adc2
 				LB,
 				u32TickCount_ms / 1000,
-				u32addr_rcvr & 0x0FFFFFFF,
-				u8lqi_1st,
-				u16fct,
-				u32addr_1st & 0x0FFFFFFF,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
 				DECODE_VOLT(u8batt),
 				i16temp,
 				i16humd,
@@ -683,9 +840,9 @@ void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 		// LCD への出力
 		V_PRINTF_LCD("%03d:%08X:%03d:%02X:S:%04d:%04d\n",
 				u32sec % 1000,
-				u32addr_1st,
-				u8lqi_1st,
-				u16fct & 0xFF,
+				sRxPktInfo.u32addr_1st,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct & 0xFF,
 				i16temp,
 				i16humd
 				);
@@ -693,22 +850,16 @@ void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 #endif
 	}
 
-	if (u8pkt == PKT_ID_STANDARD) {
+	if (sRxPktInfo.u8pkt == PKT_ID_STANDARD) {
 		uint8 u8batt = G_OCTET();
 
 		uint16 u16adc1 = G_BE_WORD();
 		uint16 u16adc2 = G_BE_WORD();
-		uint16 u16pc1 = G_BE_WORD();
-		uint16 u16pc2 = G_BE_WORD();
-
-		// LM61用の温度変換
-		//   Vo=T[℃]x10[mV]+600[mV]
-		//   T     = Vo/10-60
-		//   100xT = 10xVo-6000
-		int32 iTemp = 10 * (int32)u16adc2 - 6000L;
+		uint16 u16pc1 = G_BE_WORD(); (void)u16pc1;
+		uint16 u16pc2 = G_BE_WORD(); (void)u16pc2;
 
 		// センサー情報
-		vfPrintf(&sSerStream, ";"
+		A_PRINTF( ";"
 				"%d;"			// TIME STAMP
 				"%08X;"			// 受信機のアドレス
 				"%03d;"			// LQI  (0-255)
@@ -717,36 +868,261 @@ void vSerOutput_SmplTag3(uint8 u8lqi_1st, uint32 u32addr_1st, uint32 u32addr_rcv
 				"%04d;"			// 電源電圧 (0-3600, mV)
 				"%04d;"			// LM61温度(100x ℃)
 				"%04d;"			// SuperCAP 電圧(mV)
-				"%04d;"			// PC1
-				"%04d;"			// PC2
+				"%04d;"			// ADC1
+				"%04d;"			// ADC2
+				"%c;"			// 識別子
 				LB,
 				u32TickCount_ms / 1000,
-				u32addr_rcvr & 0x0FFFFFFF,
-				u8lqi_1st,
-				u16fct,
-				u32addr_1st & 0x0FFFFFFF,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
 				DECODE_VOLT(u8batt),
-				iTemp,
+//				iTemp,
+				u16adc2,
 				u16adc1 * 2 * 3, // 3300mV で 99% 相当
-				u16pc1,
-				u16pc2
+				u16adc1,
+				u16adc2,
+				'S'
 		);
 
 #ifdef USE_LCD
 		// LCD への出力
 		V_PRINTF_LCD("%03d:%08X:%03d:%02X:S:%04d:%04d\n",
 				u32sec % 1000,
-				u32addr_1st,
-				u8lqi_1st,
-				u16fct & 0xFF,
+				sRxPktInfo.u32addr_1st,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct & 0xFF,
+				u16adc2,
+				u16adc1 * 2
+				);
+		vLcdRefresh();
+#endif
+	}
+
+	if (sRxPktInfo.u8pkt == PKT_ID_LM61) {
+		uint8 u8batt = G_OCTET();
+
+		uint16	u16adc1 = G_BE_WORD();
+		uint16	u16adc2 = G_BE_WORD();
+		uint16	u16pc1 = G_BE_WORD(); (void)u16pc1;
+		uint16	u16pc2 = G_BE_WORD(); (void)u16pc2;
+		int	bias = G_BE_WORD();
+		uint8 minus = G_OCTET();
+
+		//	マイナスフラグが立ってたら符号を入れ替える。
+		if( minus == 1 ){
+			bias *= -1;
+		}
+
+//		A_PRINTF( "bias = %d"LB, bias);
+
+		// LM61用の温度変換
+		//   Vo=T[℃]x10[mV]+600[mV]
+		//   T     = Vo/10-60
+		//   100xT = 10xVo-6000
+		int32 iTemp = 10 * (int32)u16adc2 - 6000L + bias;
+
+		// センサー情報
+		A_PRINTF( ";"
+				"%d;"			// TIME STAMP
+				"%08X;"			// 受信機のアドレス
+				"%03d;"			// LQI  (0-255)
+				"%03d;"			// 連番
+				"%07x;"			// シリアル番号
+				"%04d;"			// 電源電圧 (0-3600, mV)
+				"%04d;"			// LM61温度(100x ℃)
+				"%04d;"			// SuperCAP 電圧(mV)
+				"%04d;"			// もともとの電圧
+				"%04d;"			// バイアスをかけた電圧
+				"%c;"			// 識別子
+				LB,
+				u32TickCount_ms / 1000,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+				DECODE_VOLT(u8batt),
+				iTemp,
+				u16adc1 * 2 * 3, // 3300mV で 99% 相当
+				u16adc1,
+				u16adc2,
+				'L'
+		);
+
+#ifdef USE_LCD
+		// LCD への出力
+		V_PRINTF_LCD("%03d:%08X:%03d:%02X:L:%04d:%04d\n",
+				u32sec % 1000,
+				sRxPktInfo.u32addr_1st,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct & 0xFF,
 				iTemp,
 				u16adc1 * 2
 				);
 		vLcdRefresh();
 #endif
 	}
+
+	if (sRxPktInfo.u8pkt == PKT_ID_IO_TIMER) {
+		uint8 u8stat = G_OCTET();
+		uint32 u32dur = G_BE_DWORD();
+
+		// センサー情報
+		A_PRINTF( ";"
+				"%d;"			// TIME STAMP
+				"%08X;"			// 受信機のアドレス
+				"%03d;"			// LQI  (0-255)
+				"%03d;"			// 連番
+				"%07x;"			// シリアル番号
+				"%s;"			// 取りえない値
+				"%s;"			//
+				"%s;"			//
+				"%s;"			//
+				"%s;"			//
+				"%c;"			// ドアフラグ
+				"%04d;"			// OPEN=1, CLOSE=0
+				"%04d;"			// 開いている時間(開いていた時間)
+				LB,
+				u32TickCount_ms / 1000,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+				"",
+				"",
+				"",
+				"",
+				"",
+				'B',
+				u8stat,
+				u32dur / 1000
+		);
+
+#ifdef USE_LCD
+		// LCD への出力
+		V_PRINTF_LCD("%03d:%08X:%03d:%02X:B:%04d:%04d\n",
+				u32sec % 1000,
+				sRxPktInfo.u32addr_1st,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct & 0xFF,
+				u8stat,
+				u32dur / 1000
+				);
+		vLcdRefresh();
+#endif
+	}
 }
 
+
+/**
+ * UART形式の出力
+ *
+ * バイナリ形式では以下のような出力が得られる
+ * A5 5A       <= ヘッダ
+ * 80 12       <= ペイロード長 (XOR チェックサム手前まで)
+ * 80 00 00 00 <= 受信機のアドレス (80000000 は親機)
+ * 84          <= 最初に受信した受信機のLQI
+ * 00 11       <= フレームカウント
+ * 81 00 00 38 <= 送信機のアドレス
+ * 00          <= 送信機の論理アドレス
+ * 04          <= パケット種別 04=UART
+ * 04          <= ペイロードのバイト数
+ * 81 00 00 38 <= データ部 (たまたま送信機のアドレスをそのまま送信した)
+ * 15          <= XOR チェックサム
+ * 04          <= 終端
+ */
+void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
+	uint8 u8buff[256], *q = u8buff; // 出力バッファ
+
+	// 受信機のアドレス
+	S_BE_DWORD(sRxPktInfo.u32addr_rcvr);
+
+	// LQI
+	S_OCTET(sRxPktInfo.u8lqi_1st);
+
+	// フレーム
+	S_BE_WORD(sRxPktInfo.u16fct);
+
+	// 送信元子機アドレス
+	S_BE_DWORD(sRxPktInfo.u32addr_1st);
+	S_OCTET(sRxPktInfo.u8id);
+
+	// パケットの種別により処理を変更
+	S_OCTET(sRxPktInfo.u8pkt);
+
+	switch(sRxPktInfo.u8pkt) {
+	//	温度センサなど
+	case PKT_ID_STANDARD:
+	case PKT_ID_LM61:
+	case PKT_ID_SHT21:
+		_C {
+			S_OCTET(G_OCTET()); // batt
+
+			S_BE_WORD(G_BE_WORD());
+			S_BE_WORD(G_BE_WORD());
+			S_BE_WORD(G_BE_WORD());
+			S_BE_WORD(G_BE_WORD());
+		}
+		break;
+
+	//	磁気スイッチ
+	case PKT_ID_IO_TIMER:
+		_C {
+			S_OCTET(G_OCTET()); // batt
+			S_OCTET(G_OCTET()); // stat
+			S_BE_DWORD(G_BE_DWORD()); // dur
+		}
+		break;
+
+	case PKT_ID_UART:
+		_C {
+			uint8 u8len = G_OCTET();
+			S_OCTET(u8len);
+
+			while (u8len--) {
+				S_OCTET(G_OCTET());
+			}
+		}
+		break;
+
+	//	押しボタン
+	case PKT_ID_BOTTON:
+		_C {
+			S_OCTET(G_OCTET()); // batt
+			S_BE_WORD(G_BE_WORD());
+			S_BE_WORD(G_BE_WORD());
+			S_OCTET(G_OCTET());
+			S_OCTET(G_OCTET());
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	sSerCmdOut.u16len = q - u8buff;
+	sSerCmdOut.au8data = u8buff;
+
+	sSerCmdOut.vOutput(&sSerCmdOut, &sSerStream);
+
+	sSerCmdOut.au8data = NULL;
+}
+
+
+void vSerOutput_Secondary() {
+	//	オプションビットで設定されていたら表示しない
+	if(!IS_APPCONF_OPT_PARENT_OUTPUT()){
+		// 出力用の関数を呼び出す
+		if (IS_APPCONF_OPT_SHT21()) {
+			A_PRINTF(";%d;"LB, u32sec);
+		} else if (IS_APPCONF_OPT_UART()) {
+			// 無し
+		} else {
+			A_PRINTF("::ts=%d"LB, u32sec);
+		}
+	}
+}
 /**
  * コマンド受け取り時の処理
  * @param pCmd
@@ -764,6 +1140,15 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 	return;
 }
 
+/**
+ * DO1をトグル動作させる
+ */
+void vLED_Toggle( void )
+{
+	sAppData.u8DO_State = !sAppData.u8DO_State;
+	//	ToCoStickのDOのLEDが光る DIPではDI4(DIO16)に出力
+	vPortSet_TrueAsLo( PORT_OUT1, sAppData.u8DO_State );
+}
 
 #ifdef USE_LCD
 /**

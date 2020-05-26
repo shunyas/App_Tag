@@ -21,6 +21,7 @@
 /***        Include files                                                 ***/
 /****************************************************************************/
 #include <string.h>
+#include <stdlib.h>
 
 #include <jendefs.h>
 #include <AppHardwareApi.h>
@@ -95,6 +96,9 @@ void vProcessSerialCmd();
  */
 void Interactive_vInit() {
 	memset(&sConfig_UnSaved, 0xFF, sizeof(tsFlashApp));
+#ifdef ENDDEVICE_INPUT
+	sConfig_UnSaved.i16param = INIT_VAL_i16;
+#endif
 
 	INPSTR_vInit(&sSerInpStr, &sSerStream);
 
@@ -339,10 +343,29 @@ static void vProcessInputByte(uint8 u8Byte) {
 #endif
 
 #ifdef ENDDEVICE_INPUT
+	case 'w':
+		// スリープ周期
+		V_PRINTF("Input Sensor Wait Duration[ms]: ");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 3,
+				E_APPCONF_WAIT_DUR);
+		break;
+
 	case 'd': // スリープ周期
 		V_PRINTF("Input Sleep Duration[ms]: ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 8,
 				E_APPCONF_SLEEP_DUR);
+		break;
+
+	case 'm': // センサの種類
+		V_PRINTF("Input Sensor Mode (HEX): ");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 2,
+				E_APPCONF_SER_MODE);
+		break;
+
+	case 'p': // センサのパラメータ
+		V_PRINTF("Input Sensor Parameter(-32767 - 32767): ");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 6,
+				E_APPCONF_SER_PARAM);
 		break;
 #endif
 
@@ -580,6 +603,15 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 #endif
 
 #ifdef ENDDEVICE_INPUT
+	case E_APPCONF_WAIT_DUR:
+		_C {
+			uint32 u32val = u32string2dec(pu8str, u8idx);
+			V_PRINTF(LB"-> ");
+			sConfig_UnSaved.u8wait = u32val;
+			V_PRINTF("%d"LB, u32val);
+		}
+		break;
+
 	case E_APPCONF_SLEEP_DUR:
 		_C {
 			uint32 u32val = u32string2dec(pu8str, u8idx);
@@ -595,6 +627,25 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			} else {
 				V_PRINTF("(ignored)"LB);
 			}
+		}
+		break;
+
+	case E_APPCONF_SER_MODE:
+		_C {
+			uint32 u32val = u32string2hex(pu8str, u8idx);
+			V_PRINTF(LB"-> ");
+			sConfig_UnSaved.u8mode = u32val;
+			V_PRINTF("%02X"LB, u32val);
+		}
+		break;
+
+	case E_APPCONF_SER_PARAM:
+		_C {
+//			int val = u32string2dec(pu8str, u8idx);
+			int val = atoi((char*)pu8str);
+			V_PRINTF(LB"-> ");
+			sConfig_UnSaved.i16param = val;
+			V_PRINTF("%d"LB, val);
 		}
 		break;
 #endif
@@ -765,8 +816,18 @@ static void vConfig_SaveAndReset() {
 		sFlash.sData.u32EncKey = sConfig_UnSaved.u32EncKey;
 	}
 #ifdef ENDDEVICE_INPUT
+	if (sConfig_UnSaved.u8wait != 0xFF) {
+		sFlash.sData.u8wait = sConfig_UnSaved.u8wait;
+	}
 	if (sConfig_UnSaved.u32Slp != 0xFFFFFFFF) {
 		sFlash.sData.u32Slp = sConfig_UnSaved.u32Slp;
+	}
+	if (sConfig_UnSaved.u8mode != 0xFF) {
+		sFlash.sData.u8mode = sConfig_UnSaved.u8mode;
+	}
+//	if (sConfig_UnSaved.i16param != 0xFFFF) {
+	if ( sConfig_UnSaved.i16param != -32768 ) {
+		sFlash.sData.i16param = sConfig_UnSaved.i16param;
 	}
 #endif
 #ifdef ROUTER
@@ -868,6 +929,21 @@ static void vSerUpdateScreen() {
 	V_PRINTF(" d: set Sleep Dur (%d)%c" LB,
 			FL_IS_MODIFIED_u32(Slp) ? FL_UNSAVE_u32(Slp) : FL_MASTER_u32(Slp),
 			FL_IS_MODIFIED_u32(Slp) ? '*' : ' ');
+
+	V_PRINTF(" w: set Sensor Wait Dur (%d)%c" LB,
+			FL_IS_MODIFIED_u8(wait) ? FL_UNSAVE_u8(wait) : FL_MASTER_u8(wait),
+			FL_IS_MODIFIED_u8(wait) ? '*' : ' ');
+
+	V_PRINTF(" m: set Sensor Mode (0x%02X)%c" LB,
+			FL_IS_MODIFIED_u8(mode) ? FL_UNSAVE_u8(mode) : FL_MASTER_u8(mode),
+			FL_IS_MODIFIED_u8(mode) ? '*' : ' ');
+
+	if( sConfig_UnSaved.i16param != -32768 ){
+		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_UNSAVE_i16(param), '*' );
+	} else {
+		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_MASTER_i16(param), ' ');
+	}
+
 #endif
 
 #ifdef PARENT

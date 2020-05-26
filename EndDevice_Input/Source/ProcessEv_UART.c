@@ -27,12 +27,26 @@
 #include "sercmd_gen.h"
 
 tsSerCmd_Context sSerCmdOut; //!< シリアル出力用
+static tsTxDataApp sTx_Retry; //!< 再送用
+static bool_t bRetry;
+static uint8 u8RetryCount = 0xff;
+static uint16 u16RetryDur = 0;
+
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 
 #define PORT_RTS0 (5)
 
 /*
  * ADC 計測をしてデータ送信するアプリケーション制御
+ */
+
+/**
+ * 始動時の処理
+ *
+ * @param E_STATE_IDLE
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_START_UP) {
@@ -74,16 +88,24 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			// RTS を設定
 			vPortSetHi(PORT_RTS0);
+
+			// 再送フラグ
+			bRetry = ((sAppData.sFlash.sData.u8wait % 10) != 0);
+			u16RetryDur = sAppData.sFlash.sData.u8wait * 10;
 		}
 
 		// RC クロックのキャリブレーションを行う
 		ToCoNet_u16RcCalib(sAppData.sFlash.sData.u16RcClock);
-
-		// PORT を出力状態にする
-		vPortAsOutput(PORT_RTS0);
 	}
 }
 
+/**
+ * UART コマンド待ち
+ * @param E_STATE_RUNNING
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
+ */
 PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
 		uint8 au8msg[16], *q = au8msg;
@@ -155,34 +177,125 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
 		} else {
 			V_PRINTF(LB"TxFl");
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_RETRY);
+		}
+
+		if (bRetry) {
+			sTx_Retry = sTx;
 		}
 
 		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 	}
 
-	// タイムアウト
+	// タイムアウト（期待の時間までにデータが来なかった）
 	if (ToCoNet_Event_u32TickFrNewState(pEv) > sAppData.sFlash.sData.u32Slp) {
 		V_PRINTF(LB"! TIME OUT (E_STATE_RUNNING)");
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 	}
 }
 
+/**
+ * 送信完了待ち
+ *
+ * @param E_STATE_APP_WAIT_TX
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
+ */
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_ORDER_KICK) { // 送信完了イベントが来たのでスリープする
-		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_RETRY); // 再送条件へ遷移
 	}
 	// タイムアウト
 	if (ToCoNet_Event_u32TickFrNewState(pEv) > 100) {
 		V_PRINTF(LB"! TIME OUT (E_STATE_APP_WAIT_TX)");
-		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_RETRY); // 再送条件へ遷移
 	}
 }
 
+/**
+ * アプリケーション再送の条件判定と短いスリープ処理
+ *
+ * @param E_SATET_APP_RETRY
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
+ */
+PRSEV_HANDLER_DEF(E_STATE_APP_RETRY, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	V_PRINTF(LB"!E_STATE_APP_RETRY (%d)", u8RetryCount);
+	if (!bRetry || u8RetryCount == 0) {
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+		return;
+	}
+
+	// 遷移してきたとき
+	if (eEvent == E_EVENT_NEW_STATE) {
+		if (u8RetryCount == 0xff) {
+			u8RetryCount = sAppData.sFlash.sData.u8wait % 10;
+		}
+
+		// 短いスリープを行う (u8RetryCount > 0)
+		pEv->bKeepStateOnSetAll = TRUE;
+		V_FLUSH();
+
+		uint16 u16dur = u16RetryDur / 2 + (ToCoNet_u32GetRand() % u16RetryDur); // +/-50% のランダム化
+		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, u16dur, FALSE, FALSE);
+		return;
+	}
+
+	// スリープ復帰
+	if (eEvent == E_EVENT_START_UP) {
+		V_PRINTF(LB"!woke from mini sleep(%d)", u8RetryCount);
+		if (IS_APPCONF_OPT_SECURE()) {
+			bRegAesKey(sAppData.sFlash.sData.u32EncKey);
+		}
+		ToCoNet_Nwk_bResume(sAppData.pContextNwk);
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_RETRY_TX);
+		u8RetryCount--; // 再送回数を減らす
+
+		return;
+	}
+}
+
+/**
+ * アプリケーション再送
+ *
+ * @param E_STATE_APP_RETRY_TX
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
+ */
+PRSEV_HANDLER_DEF(E_STATE_APP_RETRY_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	// 遷移してきたとき
+	if (eEvent == E_EVENT_NEW_STATE) {
+		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx_Retry)) {
+			V_PRINTF(LB"TxOk");
+			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
+		} else {
+			V_PRINTF(LB"TxFl");
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_RETRY);
+		}
+
+		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
+	}
+}
+
+/**
+ * スリープへの遷移
+ *
+ * @param E_STATE_APP_SLEEP
+ * @param pEv
+ * @param eEvent
+ * @param u32evarg
+ */
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
+		pEv->bKeepStateOnSetAll = FALSE;
+		u8RetryCount = 0xff;
+
 		// センサー用の電源制御回路を Hi に戻す
-		vPortSetHi(DIO_SNS_POWER);
+		vPortSetSns(FALSE);
 
 		// RTS0 を通信禁止にする
 		vPortSetHi(PORT_RTS0);
@@ -207,6 +320,8 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
 	PRSEV_HANDLER_TBL_DEF(E_STATE_RUNNING),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_TX),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_SLEEP),
+	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_RETRY),
+	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_RETRY_TX),
 	PRSEV_HANDLER_TBL_TRM
 };
 

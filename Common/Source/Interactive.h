@@ -80,6 +80,22 @@ extern void vProcessSerialCmd(tsSerCmd_Context *pCmd);
 #define FL_UNSAVE_u8(c) sConfig_UnSaved.u8##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
 #define FL_IS_MODIFIED_u8(c) (sConfig_UnSaved.u8##c != 0xFF) //!< 構造体要素アクセス用のマクロ @ingroup FLASH
 
+#define FL_MASTER_i32(c) sAppData.sFlash.sData.i32##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_UNSAVE_i32(c) sConfig_UnSaved.i32##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_IS_MODIFIED_i32(c) (sConfig_UnSaved.i32##c != -2147483648)  //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+
+#define FL_MASTER_i16(c) sAppData.sFlash.sData.i16##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_UNSAVE_i16(c) sConfig_UnSaved.i16##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_IS_MODIFIED_i16(c) (sConfig_UnSaved.i16##c != -32768)  //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+
+#define FL_MASTER_i8(c) sAppData.sFlash.sData.i8##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_UNSAVE_i8(c) sConfig_UnSaved.i8##c //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+#define FL_IS_MODIFIED_i8(c) (sConfig_UnSaved.i8##c != -128)  //!< 構造体要素アクセス用のマクロ @ingroup FLASH
+
+#define INIT_VAL_i32 -2147483648			//	符号ありint32の初期値
+#define INIT_VAL_i16 -32768					//	符号ありint16の初期値
+#define INIT_VAL_i8 -128					//	符号ありint8の初期値
+
 #define VERSION_U32 ((VERSION_CODE << 24) | (VERSION_MAIN << 16) | (VERSION_SUB << 8) | (VERSION_VAR))
 
 /*************************************************************************
@@ -103,12 +119,15 @@ enum {
 	E_APPCONF_ID,        //!< 8bitのID(ネットワークアドレス)
 	E_APPCONF_LAYER,     //!< ネットワークレイヤ
 	E_APPCONF_SLEEP_DUR, //!< スリープ期間設定
+	E_APPCONF_WAIT_DUR,	 //!< センサーのウェイト待ち
 	E_APPCONF_PWM_HZ,    //!< PWM の周波数
 	E_APPCONF_SAMP_HZ,   //!< サンプリング周波数
 	E_APPCONF_OPT,       //!< DIOの入力方法に関する設定
 	E_APPCONF_BAUD_SAFE, //!< BPS ピンをGにしたときのボーレート
 	E_APPCONF_BAUD_PARITY, //!< BPS ピンをGにしたときのパリティ設定 (0:None, 1:Odd, 2:Even)
 	E_APPCONF_ENC_KEY,    //!< 暗号化鍵の設定
+	E_APPCONF_SER_MODE,    //!< センサの設定
+	E_APPCONF_SER_PARAM,    //!< センサの固有のパラメータの設定
 	E_APPCONF_TEST
 };
 

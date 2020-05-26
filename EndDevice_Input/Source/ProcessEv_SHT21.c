@@ -219,7 +219,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
 		// センサー用の電源制御回路を Hi に戻す
-		vPortSetHi(DIO_SNS_POWER);
+		vPortSetSns(FALSE);
 
 		// 周期スリープに入る
 		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒
@@ -424,5 +424,5 @@ static void vStoreSensorValue() {
 	}
 
 	// センサー用の電源制御回路を Hi に戻す
-	vPortSetHi(DIO_SNS_POWER);
+	vPortSetSns(FALSE);
 }

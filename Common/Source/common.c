@@ -34,6 +34,8 @@
 #include "serial.h"
 #include "fprintf.h"
 
+#include "Interactive.h"
+
 // ToCoNet Header
 #include "ToCoNet.h"
 

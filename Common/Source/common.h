@@ -40,15 +40,38 @@ extern const uint8 au8EncKey[];
 /*
  * パケット識別子
  */
-#define PKT_ID_STANDARD 1
-#define PKT_ID_IO_TIMER 2
-#define PKT_ID_SHT21 3
-#define PKT_ID_UART 4
+#define PKT_ID_STANDARD 0x10
+#define PKT_ID_LM61 0x11
+#define PKT_ID_SHT21 0x31
+#define PKT_ID_IO_TIMER 0x51
+#define PKT_ID_UART 0x81
+#define PKT_ID_BOTTON 0xFE
 
 /*
  * 標準ポート定義 (TWE-Lite DIP)
  */
 #if defined(JN516x)
+#if defined (USE_TOCOSTICK)
+// ToCoStick 用
+#warning "IO CONF IS FOR TOCOSTICK!"
+#define PORT_OUT1 16 // DIO16/18 をスワップ
+#define PORT_OUT2 19
+#define PORT_OUT3 4
+#define PORT_OUT4 9
+
+#define PORT_INPUT1 12
+#define PORT_INPUT2 13
+#define PORT_INPUT3 11
+#define PORT_INPUT4 18 // DIO16/18 をスワップ
+
+#define PORT_CONF1 10
+#define PORT_CONF2 2
+#define PORT_CONF3 3
+
+#define PORT_BAUD 17
+#define PORT_UART0_RX 7
+
+#else	//	USE_TOCOSTICK
 #define PORT_OUT1 18
 #define PORT_OUT2 19
 #define PORT_OUT3 4
@@ -62,8 +85,8 @@ extern const uint8 au8EncKey[];
 #define PORT_CONF3 3
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
-#endif
-#if defined(JN514x)
+#endif	//	USE_TOCOSTICK
+#elif defined(JN514x)
 #define PORT_OUT1 PORT_KIT_LED1
 #define PORT_OUT2 PORT_KIT_LED2
 #define PORT_OUT3 PORT_KIT_LED3

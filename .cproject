@@ -369,6 +369,52 @@
 			<storageModule moduleId="org.eclipse.cdt.core.language.mapping"/>
 			<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 		</cconfiguration>
+		<cconfiguration id="cdt.managedbuild.toolchain.gnu.cygwin.base.1601921899.147779785.37820112.1086289428.1192827784">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.cygwin.base.1601921899.147779785.37820112.1086289428.1192827784" moduleId="org.eclipse.cdt.core.settings" name="Parent (JN5164)( for ToCoStick )">
+				<externalSettings/>
+				<extensions>
+					<extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser"/>
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration artifactName="JN-AN-1067-Jenie-Wireless-Sensor-Network\n" buildProperties="" description="for ToCoStick" id="cdt.managedbuild.toolchain.gnu.cygwin.base.1601921899.147779785.37820112.1086289428.1192827784" name="Parent (JN5164)( for ToCoStick )" parent="org.eclipse.cdt.build.core.emptycfg">
+					<folderInfo id="cdt.managedbuild.toolchain.gnu.cygwin.base.1601921899.147779785.37820112.1086289428.1192827784." name="/" resourcePath="">
+						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.base.1317090909" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.base">
+							<option id="cdt.managedbuild.option.gnu.cross.prefix.788366340" name="接頭部" superClass="cdt.managedbuild.option.gnu.cross.prefix"/>
+							<option id="cdt.managedbuild.option.gnu.cross.path.824778156" name="パス" superClass="cdt.managedbuild.option.gnu.cross.path"/>
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.527719772" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
+							<builder arguments="TWE_CHIP_MODEL=JN5164 TWE_BOARD_MODEL=TOCOSTICK" buildPath="${ProjDirPath}/Parent/Build" command="make" id="cdt.managedbuild.builder.gnu.cross.1022361279" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make ビルダー" parallelBuildOn="true" parallelizationNumber="optimal" superClass="cdt.managedbuild.builder.gnu.cross"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.1601363250" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
+								<option id="gnu.c.compiler.option.preprocessor.def.symbols.21940947" name="定義済みのシンボル (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="ToCoNet_USE_MOD_NWK_MESSAGE_POOL"/>
+								</option>
+								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1997098714" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.compiler.702491920" name="Cross G++ Compiler" superClass="cdt.managedbuild.tool.gnu.cross.cpp.compiler"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.c.linker.1075379222" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker">
+								<inputType id="cdt.managedbuild.tool.gnu.c.linker.input.511584999" superClass="cdt.managedbuild.tool.gnu.c.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.linker.125291024" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.archiver.556463557" name="Cross GCC Archiver" superClass="cdt.managedbuild.tool.gnu.cross.archiver"/>
+							<tool id="cdt.managedbuild.tool.gnu.cross.assembler.853960075" name="Cross GCC Assembler" superClass="cdt.managedbuild.tool.gnu.cross.assembler">
+								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.960023540" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+							</tool>
+						</toolChain>
+					</folderInfo>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+			<storageModule moduleId="org.eclipse.cdt.core.language.mapping"/>
+			<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
+		</cconfiguration>
 	</storageModule>
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="JN-AN-1067-Jenie-Wireless-Sensor-Network\n.null.433696002" name="JN-AN-1067-Jenie-Wireless-Sensor-Network\n"/>
@@ -388,20 +434,20 @@
 		<configuration configurationName="EndDevice_Input (JN5148)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
-		<configuration configurationName="Parent (JN5164)">
-			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
+		<configuration configurationName="EndDevice">
+			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
 		</configuration>
 		<configuration configurationName="UART_Slave">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_UART"/>
 		</configuration>
-		<configuration configurationName="EndDevice">
-			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
-		</configuration>
-		<configuration configurationName="EndDevice_Input"/>
-		<configuration configurationName="Router (JN5148)">
+		<configuration configurationName="Parent (JN5164)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
+		<configuration configurationName="EndDevice_Input"/>
 		<configuration configurationName="Router (JN5164)">
+			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
+		</configuration>
+		<configuration configurationName="Router (JN5148)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
 		<configuration configurationName="EndDevice_Remote (JN5164)">
@@ -410,14 +456,17 @@
 		<configuration configurationName="EndDevice_Input (JN5164)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
+		<configuration configurationName="Parent (JN5164)( for ToCoStick )">
+			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
+		</configuration>
 		<configuration configurationName="UART_Master">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_UART"/>
 		</configuration>
-		<configuration configurationName="EndDevice_Remote (JN5148)">
-			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
-		</configuration>
 		<configuration configurationName="Router">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
+		</configuration>
+		<configuration configurationName="EndDevice_Remote (JN5148)">
+			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings">

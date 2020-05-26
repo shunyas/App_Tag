@@ -63,6 +63,7 @@ APPSRC += sercmd_plus3.c
 APPSRC += sercmd_binary.c
 
 APPSRC += ProcessEv_Standard.c
+APPSRC += ProcessEv_Botton.c
 APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
@@ -133,7 +134,7 @@ APP_COMMON_SRC_DIR_ADD1 = ../../Common/Sensor
 # コンパイラ付属ライブラリ (math, spp など) を指定します。
 # ※ 各ライブラリの動作保証はありません。
 #
-# LDLIBS += m
+#LDLIBS += m
 
 ### Additional linker options 
 # リンカへの追加オプションです。

@@ -89,6 +89,12 @@ include ../../../../MkFiles/toconet.mk
 #CFLAGS += -DDUMMY
 CFLAGS += -DPARENT
 
+ifeq ($(TWE_BOARD_MODEL),TOCOSTICK)
+  CFLAGS += -DUSE_TOCOSTICK
+  OBJDIR_SUFF += _ToCoStick
+  TARGET_SUFF += _ToCoStick
+endif 
+
 ### Build Options
 # プラットフォーム別のビルドをしたり、デバッグ用のビルドのファイル名を変更
 # したいような場合の設定。

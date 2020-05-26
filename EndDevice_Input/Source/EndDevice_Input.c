@@ -147,16 +147,14 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortAsOutput(DIO_VOLTAGE_CHECKER);
 		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
 
-		// センサー用の制御 (Lo:Active)
-		vPortSetLo(DIO_SNS_POWER);
-		vPortAsOutput(DIO_SNS_POWER);
-
 		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用
 		vPortSetHi(DIO_SUPERCAP_CONTROL);
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
 
-		if (IS_APPCONF_OPT_DOOR_TIMER()) {
+		//	入力ボタンのプルアップを停止する
+		if ((sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER)	// ドアタイマー
+			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
 			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
 		}
 
@@ -169,6 +167,11 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		// フラッシュメモリからの読み出し
 		//   フラッシュからの読み込みが失敗した場合、ID=15 で設定する
 		sAppData.bFlashLoaded = Config_bLoad(&sAppData.sFlash);
+
+		// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
+		vPortSetSns(TRUE);
+		vPortAsOutput(DIO_SNS_POWER);
+		vPortDisablePullup(DIO_SNS_POWER);
 
 		// configure network
 		sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
@@ -203,7 +206,34 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// インタラクティブモードの初期化
 			Interactive_vInit();
 		} else
-		if (IS_APPCONF_OPT_DOOR_TIMER()) {
+		//	ボタン起動モード
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON ) {
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// ADC の初期化
+			vInitADC();
+
+			// イベント処理の初期化
+			vInitAppBotton();
+		} else
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
+			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// UART 処理
+			vInitAppUart();
+
+			// インタラクティブモード
+			Interactive_vInit();
+		} else
+		//	磁気スイッチなど
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ) {
 			// ドアタイマーで起動
 			// sToCoNet_AppContext.u8CPUClk = 1; // runs at 8MHz (Doze を利用するのであまり効果が無いかもしれない)
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -215,7 +245,8 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppDoorTimer();
 		} else
-		if (IS_APPCONF_OPT_SHT21()) {
+		// SHT21
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 
@@ -228,20 +259,12 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppSHT21();
 		} else
-		if (IS_APPCONF_OPT_UART()) {
-			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
-
-			// Other Hardware
-			vInitHardware(FALSE);
-
-			// UART 処理
-			vInitAppUart();
-
-			// インタラクティブモード
-			Interactive_vInit();
-		} else {
+		//	LM61等のアナログセンサ用
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
+			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
 			// 通常アプリで起動
 			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
 
 			// ADC の初期化
@@ -293,6 +316,10 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 				FALSE,
 				FALSE);
 
+		// センサー用の制御 (Lo:Active)
+		vPortSetSns(TRUE);
+		vPortAsOutput(DIO_SNS_POWER);
+
 		// Other Hardware
 		Interactive_vReInit();
 		vSerialInit();
@@ -301,13 +328,30 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		ToCoNet_vDebugInit(&sSerStream);
 		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
-		if (!IS_APPCONF_OPT_DOOR_TIMER()) {
+		// センサ特有の初期化
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
+		} else
+		//	磁気スイッチなど
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ) {
+		} else
+		// SHT21
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		//	LM61等のアナログセンサ用
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
+			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
 			// ADC の初期化
 			vInitADC();
 		}
 
 		// 他のハードの待ち
-		vInitHardware(FALSE);
+		vInitHardware(TRUE);
 
 		if (!sAppData.bWakeupByButton) {
 			// タイマーで起きた
@@ -450,7 +494,7 @@ static void vInitHardware(int f_warm_start) {
 	vSerialInit();
 
 	// PWM の初期化
-	if (IS_APPCONF_OPT_DOOR_TIMER()) {
+	if ( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ) {
 # ifndef JN516x
 #  warning "IO_TIMER is not implemented on JN514x"
 # endif
@@ -482,7 +526,8 @@ static void vInitHardware(int f_warm_start) {
 
 	// SMBUS の初期化
 
-	if (IS_APPCONF_OPT_SHT21()) {
+//	if (IS_APPCONF_OPT_SHT21()) {
+	if ( sAppData.sFlash.sData.u8mode ==  PKT_ID_SHT21 ) {
 		vSMBusInit();
 	}
 }
@@ -546,6 +591,18 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 	return;
 }
 
+/**
+ * センサーアクティブ時のポートの制御を行う
+ *
+ * @param bActive ACTIVE時がTRUE
+ */
+void vPortSetSns(bool_t bActive) {
+	if (IS_APPCONF_OPT_INVERSE_SNS_ACTIVE()) {
+		bActive = !bActive;
+	}
+
+	vPortSet_TrueAsLo(DIO_SNS_POWER, bActive);
+}
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

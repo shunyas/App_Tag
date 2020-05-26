@@ -26,7 +26,7 @@
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 
-static void vSleep_IO_Timer(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep);
+static void vSleep_IO_Timer(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep, bool_t bInt);
 extern tsTimerContext sTimerPWM[1]; //!< タイマー管理構造体  @ingroup MASTER
 
 /**
@@ -44,6 +44,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		sAppData.u8NwkStat = E_IO_TIMER_NWK_IDLE;
 		vSerInitMessage();
 
+		sAppData.bDI1_Now_Opened = FALSE;
+
 		vPortSetLo(PORT_KIT_LED1);
 		vPortAsOutput(PORT_KIT_LED1);
 		// 暗号化鍵の登録
@@ -55,6 +57,10 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		if (sAppData.bWakeupByButton) {
 			sAppData.u32DI1_Dur_Opened_ms = 0;
 			sAppData.u16DI1_Ct_PktFired = 0;
+			sAppData.bDI1_Now_Opened = TRUE; // 割り込み起床時なので Open
+		} else {
+			// IOの再チェック
+			sAppData.bDI1_Now_Opened = (bPortRead(PORT_INPUT1) == FALSE);
 		}
 
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
@@ -66,10 +72,10 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			V_PRINTF(LB "*** Cold starting");
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
 		}
+
+		V_PRINTF(LB "* IO=%d, t=%d, ct=%d", sAppData.bDI1_Now_Opened, sAppData.u32DI1_Dur_Opened_ms, sAppData.u16DI1_Ct_PktFired);
 	}
 
-	// IO の再チェック
-	sAppData.bDI1_Now_Opened = (bPortRead(PORT_INPUT1) == FALSE);
 	ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
 }
 
@@ -85,16 +91,23 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
  * @param u32evarg
  */
 PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	static bool_t bBuzz;
+	static bool_t bTxCmp;
+
 	/*
 	 * ブザーを鳴らす処理
 	 */
 	if (eEvent == E_EVENT_NEW_STATE) {
+		bBuzz = FALSE;
+		bTxCmp = TRUE;
+
 		if (sAppData.bDI1_Now_Opened) {
 			// スイッチが開いていて、.u32Slp が経過した時点でブザーを鳴らす
 			if (!sAppData.u32DI1_Dur_Opened_ms ||  sAppData.u32DI1_Dur_Opened_ms >= sAppData.sFlash.sData.u32Slp) {
 				sTimerPWM[0].u16duty = 512;
 				vTimerChangeDuty(&sTimerPWM[0]);
 
+				bBuzz = TRUE;
 				V_PRINTF(LB"* Buzz Start");
 			} else {
 				// 直ぐにスリープ
@@ -104,16 +117,20 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 		// 送信
 		if (sAppData.u32DI1_Dur_Opened_ms == 0 // 初回
-			|| sAppData.u32DI1_Dur_Opened_ms >= sAppData.sFlash.sData.u32Slp * sAppData.u16DI1_Ct_PktFired // .u32Slp 周期
+			|| (sAppData.u32DI1_Dur_Opened_ms % sAppData.sFlash.sData.u32Slp) < u16_IO_Timer_mini_sleep_dur // .u32Slp 周期
 			|| !sAppData.bDI1_Now_Opened // 閉じたとき
 		) {
 			// 送信要求
 			sAppData.u8NwkStat = E_IO_TIMER_NWK_FIRE_REQUEST;
 			sAppData.u16DI1_Ct_PktFired++;
+
+			bTxCmp = FALSE;
 		}
+
+		return;
 	}
 
-	if (ToCoNet_Event_u32TickFrNewState(pEv) > u16_IO_Timer_buzz_dur) {
+	if (bBuzz && ToCoNet_Event_u32TickFrNewState(pEv) > u16_IO_Timer_buzz_dur) {
 		// u16_IO_Timer_buzz_dur [ms] を超えたら終了
 		if (sTimerPWM[0].u16duty != 1024) {
 			sTimerPWM[0].u16duty = 1024;
@@ -122,19 +139,25 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 			V_PRINTF(LB"* Buzz End");
 		}
 
-		if (sAppData.u8NwkStat) { // 送信が実施された時
-			bool_t bCond = FALSE;
+		bBuzz = FALSE;
+	}
 
-			bCond |= (sAppData.u8NwkStat & E_IO_TIMER_NWK_COMPLETE_MASK) != 0;
-			bCond |= (ToCoNet_Event_u32TickFrNewState(pEv) > u16_IO_Timer_buzz_dur + 50); // 50ms 余分にタイムアウトを設定
+	if (sAppData.u8NwkStat) { // 送信が実施された時
+		bool_t bCond = FALSE;
 
-			if (bCond) {
-				// 送信完了を待ってスリープ
-				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
-			}
-		} else {
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+		bCond |= (sAppData.u8NwkStat & E_IO_TIMER_NWK_COMPLETE_MASK) != 0;
+		bCond |= (ToCoNet_Event_u32TickFrNewState(pEv) > u16_IO_Timer_buzz_dur + 50); // 50ms 余分にタイムアウトを設定
+
+		if (bCond) {
+			// 送信完了を待ってスリープ
+			bTxCmp = TRUE;
+			V_PRINTF(LB"* TxCmp %d", eEvent);
 		}
+	}
+
+	if (!bBuzz && bTxCmp) { // ブザーが鳴り終わった&&送信し終わった
+		// 終了条件
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
 	}
 }
 
@@ -150,17 +173,17 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
 		// センサー用の電源制御回路を Hi に戻す
-		vPortSetHi(DIO_SNS_POWER);
+		vPortSetSns(FALSE);
 
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
 		V_PRINTF(LB"Sleeping...");
 
 		// 念のため状態を再チェック
-		sAppData.bDI1_Now_Opened = (bPortRead(PORT_INPUT1) == FALSE);
+		bool_t bOpen = (bPortRead(PORT_INPUT1) == FALSE);
 
 		// 周期スリープに入る
 		//  - 初回は一定時間秒あけて、次回以降はスリープ復帰を基点に５秒
-		if (sAppData.bDI1_Now_Opened) {
+		if (sAppData.bDI1_Now_Opened || bOpen) {
 			// IO が LO の間は周期スリープする
 			V_PRINTF("%dms", u16_IO_Timer_mini_sleep_dur);
 			V_FLUSH();
@@ -168,13 +191,13 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 			bool_t bPeriodic = (sAppData.u32DI1_Dur_Opened_ms != 0); // 初回はこの時点から 1000ms, それ以外は周期的に。
 
 			sAppData.u32DI1_Dur_Opened_ms += u16_IO_Timer_mini_sleep_dur;
-			vSleep_IO_Timer(1000, bPeriodic, FALSE);
+			vSleep_IO_Timer(u16_IO_Timer_mini_sleep_dur, bPeriodic, FALSE, FALSE);
 		} else {
 			V_PRINTF("no timer");
 			V_FLUSH();
 
 			sAppData.u32DI1_Dur_Opened_ms = 0;
-			vSleep_IO_Timer(0, FALSE, FALSE);
+			vSleep_IO_Timer(60*1000UL, FALSE, FALSE, TRUE); // １分に１回は起きて送信する&割り込み有効
 		}
 	}
 }
@@ -185,19 +208,13 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
  * @param bPeriodic TRUE:前回の起床時間から次のウェイクアップタイミングを計る
  * @param bDeep TRUE:RAM OFF スリープ
  */
-static void vSleep_IO_Timer(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep) {
-	// print message.
-	vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
-
-	// stop interrupt source, if interrupt source is still running.
-	;
-
+static void vSleep_IO_Timer(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep, bool_t bInt) {
 	// set UART Rx port as interrupt source
 	vAHI_DioSetDirection(PORT_INPUT_MASK, 0); // set as input
 
 	(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 
-	if (u32SleepDur_ms == 0) { // waketimer なしスリープ時に DIO 割り込みを設定
+	if (bInt) { // waketimer なしスリープ時に DIO 割り込みを設定
 		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 		// vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ(立ち上がり)
 		vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ(立ち上がり)
