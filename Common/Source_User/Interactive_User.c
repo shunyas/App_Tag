@@ -29,7 +29,11 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 	p->u32appid = APP_ID;
 	p->u32chmask = CHMASK;
 	p->u8ch = CHANNEL;
+#ifdef ENDDEVICE_INPUT
+	p->u8pow = 0x13;
+#else
 	p->u8pow = 3;
+#endif
 	p->u8id = 0;
 
 #ifdef PARENT

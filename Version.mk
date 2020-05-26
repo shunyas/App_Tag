@@ -1,7 +1,9 @@
 VERSION_MAIN = 1
 VERSION_SUB  = 5
-VERSION_VAR  = 1
+VERSION_VAR  = 3
 
+# 1.5.3 ADXL345 シェイクモードの調整 FIFOの修正
+# 1.5.2 ADXL345 シェイクモードの追加
 # 1.5.1 省エネモードの追加
 # 1.5.0 リモート設定機能を実装 TWE-Lite-2525Aのデフォルト送信先をApp_TweLiteに変更 ADXL345のモードを複数種選択可能
 # 1.4.1 TWE-Lite 2525Aに対応 複数種のI2Cセンサに対応

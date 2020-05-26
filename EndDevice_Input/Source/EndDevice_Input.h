@@ -36,6 +36,10 @@ extern "C" {
 
 // Select Modules (define befor include "ToCoNet.h")
 #define ToCoNet_USE_MOD_NWK_LAYERTREE_MININODES
+//#define ToCoNet_USE_MOD_RAND_MT
+//#define ToCoNet_USE_MOD_RAND_XOR_SHIFT
+
+
 
 // includes
 #include "ToCoNet.h"
@@ -119,6 +123,7 @@ void vInitAppUart();
 void vInitAppConfig();
 void vInitAppConfigMaster();
 
+bool_t bSendMessage( uint8* pu8Data, uint8 u8Length );
 void vPortSetSns(bool_t bActive);
 
 /****************************************************************************/

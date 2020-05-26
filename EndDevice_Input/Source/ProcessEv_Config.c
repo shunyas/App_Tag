@@ -182,6 +182,19 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		}
 	}
 
+	//	設定親機がいない、設定が完了した以外はLEDを点灯させて永久にスリープ
+	if( u8Flags != 1 && u8Flags != 7 ){
+		sAppData.u8LedState = 1;
+#ifdef LITE2525A
+		vPortSetHi(LED);
+#else
+		vPortSetLo(LED);
+#endif
+		V_PRINTF("!INF: ETERNAL SLEEP %02X", u8Flags);
+		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
+		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+	}
+
 	if (PRSEV_u32TickFrNewState(pEv) > 100 && u8RemoteConf != 0xFF) {
 		// スリープ遷移
 		u8RemoteConf = 0xFF;
@@ -298,7 +311,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		uint32 u32ver = G_BE_DWORD();
 		if (u32ver != VERSION_U32) {
 			V_PRINTF(LB"!VERSION_U32");
-			return;
+//			return;
 		}
 
 		// *   パケット種別 = 応答

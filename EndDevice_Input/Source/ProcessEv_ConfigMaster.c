@@ -169,7 +169,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		uint32 u32ver = G_BE_DWORD();
 		if (u32ver != VERSION_U32) {
 			V_PRINTF(LB"!VERSION_U32");
-			return;
+//			return;
 		}
 
 		// *   パケット種別 = 応答

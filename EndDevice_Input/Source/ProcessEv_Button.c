@@ -37,12 +37,6 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// 起床メッセージ
 		vSerInitMessage();
 
-		// 暗号化鍵の登録
-		if (IS_APPCONF_OPT_SECURE()) {
-			bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
-			V_PRINTF(LB "*** Register AES key (%d) ***", bRes);
-		}
-
 		//	初回起動(リセット)かスリープからの復帰かで表示するメッセージを変える
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -83,35 +77,8 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
 	}
 	if (eEvent == E_ORDER_KICK) {
-		V_PRINTF(LB"[E_STATE_RUNNING/SNS_COMP]");
-		sAppData.u16frame_count++; // シリアル番号を更新する
-
-		tsTxDataApp sTx;
-		memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
-		uint8 *q =  sTx.auData;
-
-		sTx.u32SrcAddr = ToCoNet_u32GetSerial();
-
-		sTx.u16DelayMin = 0;
-		sTx.u16DelayMax = 0;
-		sTx.u16RetryDur = 0;
-		sTx.u8Retry = 0;
-
-		if (IS_APPCONF_OPT_TO_ROUTER()) {
-			// ルータがアプリ中で一度受信して、ルータから親機に再配送
-			sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
-		} else {
-			// ルータがアプリ中では受信せず、単純に中継する
-			sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
-		}
-
-		// ペイロードの準備
-		S_OCTET('T');
-		S_OCTET(sAppData.sFlash.sData.u8id);
-		S_BE_WORD(sAppData.u16frame_count);
-
-		S_OCTET(sAppData.sFlash.sData.u8mode);	// パケット識別子
-
+		uint8	au8Data[7];
+		uint8*	q = au8Data;
 		S_OCTET(sAppData.sSns.u8Batt);
 
 		S_BE_WORD(sAppData.sSns.u16Adc1);
@@ -128,20 +95,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		uint8 DI_Bitmap = readInput();
 		S_OCTET( DI_Bitmap );
 
-
-		sTx.u8Len = q - sTx.auData; // パケットのサイズ
-		sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
-		sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
-		sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
-		//sTx.u8Retry = 0x81; // 強制２回送信
-
-		if (IS_APPCONF_OPT_SECURE()) {
-			sTx.bSecurePacket = TRUE;
-		}
-
-		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
-			V_PRINTF(LB"TxOk");
-			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+		if (  bSendMessage( au8Data, q-au8Data ) ) {
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
 		} else {
 			V_PRINTF(LB"TxFl");

@@ -69,7 +69,7 @@ enum {
  * 管理構造体
  */
 typedef struct _tsInpStr_Context {
-	uint8 au8Data[64]; //!< 入力文字バッファ
+	uint8 au8Data[256]; //!< 入力文字バッファ
 	uint8 u8State; //!< 状態
 	uint8 u8Idx; //!< 入力文字数（＝配列上のインデックス）
 	uint8 u8DataType; //!< データ種別

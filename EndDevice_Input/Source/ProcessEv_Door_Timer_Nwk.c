@@ -68,50 +68,26 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
 		V_PRINTF(LB"** RF transmit request - ");
-		sAppData.u16frame_count++; // シリアル番号を更新する
 
-		tsTxDataApp sTx;
-		memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
-		uint8 *q =  sTx.auData;
-
-		sTx.u32SrcAddr = ToCoNet_u32GetSerial();
-
-		if (IS_APPCONF_OPT_TO_ROUTER()) {
-			// ルータがアプリ中で一度受信して、ルータから親機に再配送
-			sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
-		} else {
-			// ルータがアプリ中では受信せず、単純に中継する
-			sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
-		}
-
-		// ペイロードの準備
-		S_OCTET('T');
-		S_OCTET(sAppData.sFlash.sData.u8id);
-		S_BE_WORD(sAppData.u16frame_count);
-
-		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子
+		uint8 au8Data[5];
+		uint8 *q =  au8Data;
 
 		S_OCTET(sAppData.bDI1_Now_Opened); // 開閉状態
 		S_BE_DWORD(sAppData.u32DI1_Dur_Opened_ms); // 連続開時間
 
-		sTx.u8Len = q - sTx.auData; // パケットのサイズ
-		sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
-		sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
-		sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
-		sTx.u8Retry = 0x81; // 強制２回送信
-
-		if (IS_APPCONF_OPT_SECURE()) {
-			sTx.bSecurePacket = TRUE;
-		}
-
-		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
-			V_PRINTF(LB "Tx Start...");
-			//extern void ToCoNet_Tx_vProcessQueue();
-			//ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
-		} else {
-			V_PRINTF(LB "Tx Fail.");
+		if( bSendMessage( au8Data, q-au8Data ) ){
+		}else{
 			sAppData.u8NwkStat = E_IO_TIMER_NWK_COMPLETE_TX_FAIL;
 		}
+
+//		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
+//			V_PRINTF(LB "Tx Start...");
+			//extern void ToCoNet_Tx_vProcessQueue();
+			//ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+//		} else {
+//			V_PRINTF(LB "Tx Fail.");
+//			sAppData.u8NwkStat = E_IO_TIMER_NWK_COMPLETE_TX_FAIL;
+//		}
 
 		V_PRINTF(" FR=%04X ", sAppData.u16frame_count);
 	}

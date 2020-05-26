@@ -336,9 +336,17 @@ static void vProcessInputByte(uint8 u8Byte) {
 		break;
 
 	case 'x': // 出力の変更
+#ifdef ENDDEVICE_INPUT
+		V_PRINTF("Retry & Rf Power"
+				LB "   YZ Y=Retry(0-9:count)"
+				LB "      Z=Power(3:Max,2,1,0:Min)"
+				LB "Input: ");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 2, E_APPCONF_TX_POWER);
+
+#else
 		V_PRINTF("Tx Power (0[min]-3[max]): ");
-		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 1,
-				E_APPCONF_TX_POWER);
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 1, E_APPCONF_TX_POWER);
+#endif
 		break;
 
 #ifdef ROUTER
@@ -377,7 +385,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 	case 'P': // センサのパラメータ
 		V_PRINTF("Input Sensor Parameter : ");
-		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 64,
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 255,
 				E_APPCONF_PARAM);
 		break;
 #endif
@@ -597,12 +605,14 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 
 	case E_APPCONF_TX_POWER:
 		_C {
-			uint32 u32val = u32string2dec(pu8str, u8idx);
+			uint32 u32val = u32string2hex(pu8str, u8idx);
+			uint8 u8Pow = (u32val&0x000F);
 			V_PRINTF(LB"-> ");
-			if (u32val <= 3) {
+			if (u8Pow <= 3) {
 				sConfig_UnSaved.u8pow = u32val;
-				V_PRINTF("%d"LB, u32val);
+				V_PRINTF("%x"LB, u32val);
 			} else {
+				V_PRINTF("POW = %d"LB, u8Pow);
 				V_PRINTF("(ignored)"LB);
 			}
 		}
@@ -674,7 +684,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 		_C {
 			uint8	i = 0, j = 0;
 			uint8*	str = NULL;
-			uint8*	param[4] = { NULL, NULL, NULL, NULL };
+			uint8*	param[9] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 			char*	var = NULL;
 			uint8*	number = NULL;
 			char	delims[] = ",";
@@ -688,7 +698,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 
 			//	カンマ区切りの分割
 			str = (uint8*)strtok( (char*)pu8str, delims );
-			while( str != NULL || i < 4 ){
+			while( str != NULL || i < 9 ){
 				param[i] = str;
 				i++;
 				str = (uint8*)strtok( NULL, delims );
@@ -759,6 +769,31 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 					u32val = u32string2dec( number, strlen((char*)number) );
 					sConfig_UnSaved.sADXL345Param.u16TimeInactive = (uint16)u32val;
 					V_PRINTF("TII=%d", u32val );
+				}else
+				if( strcmp( var, "fif" ) == 0 || strcmp( var, "FIF" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16Duration = (uint16)u32val;
+					V_PRINTF("FIF=%d", u32val );
+				}else
+				if( strcmp( var, "th1" ) == 0 || strcmp( var, "TH1" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdTap = (uint16)u32val;
+					V_PRINTF("TH1=%d", u32val );
+				}else
+				if( strcmp( var, "th2" ) == 0 || strcmp( var, "TH2" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
+					V_PRINTF("TH2=%d", u32val );
+				}else
+				if( strcmp( var, "th3" ) == 0 || strcmp( var, "TH3" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdActive = (uint16)u32val;
+					V_PRINTF("TH3=%d", u32val );
+				}else
+				if( strcmp( var, "th4" ) == 0 || strcmp( var, "TH4" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
+					V_PRINTF("TH4=%d", u32val );
 				}
 				j++;
 				if( j == i ){
@@ -1115,7 +1150,7 @@ static void vSerUpdateScreen() {
 	}
 	V_PRINTF(")%c" LB, FL_IS_MODIFIED_u32(chmask) ? '*' : ' ');
 
-	V_PRINTF(" x: set Tx Power (%d)%c" LB,
+	V_PRINTF(" x: set Tx Power (%x)%c" LB,
 			FL_IS_MODIFIED_u8(pow) ? FL_UNSAVE_u8(pow) : FL_MASTER_u8(pow),
 			FL_IS_MODIFIED_u8(pow) ? '*' : ' ');
 

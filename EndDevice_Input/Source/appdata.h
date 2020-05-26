@@ -53,6 +53,9 @@ typedef struct {
 	// frame count
 	uint16 u16frame_count;
 
+	//	Retry
+	uint8 u8Retry;
+
 	// ADC
 	tsObjData_ADC sObjADC; //!< ADC管理構造体（データ部）
 	tsSnsObj sADC; //!< ADC管理構造体（制御部）

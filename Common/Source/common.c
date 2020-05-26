@@ -39,6 +39,10 @@
 // ToCoNet Header
 #include "ToCoNet.h"
 
+#ifdef ENDDEVICE_INPUT
+#include "EndDevice_Input.h"
+#endif
+
 /**
  * Sleep の DIO wakeup 用
  */
@@ -132,6 +136,20 @@ bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Le
  * @param bDeep TRUE:RAM OFF スリープ
  */
 void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep) {
+#ifdef ENDDEVICE_INPUT
+	if(IS_APPCONF_OPT_WAKE_RANDOM()){		//	起床ランダムのオプションが立っていた時
+		uint32 u32max = u32SleepDur_ms>>3;		//	だいたい±10%
+		uint32 u32Rand = ToCoNet_u32GetRand();
+		uint32 u32Rand_max = u32Rand%(u32max+1);
+		if( (u32Rand&0x8000) != 0 ){
+			if( u32Rand_max+10 < u32SleepDur_ms && u32SleepDur_ms > 10 ){	//	スリープ時間が10ms以下にならないようにする
+				u32SleepDur_ms -= u32Rand_max;
+			}
+		}else{
+			u32SleepDur_ms += u32Rand_max;
+		}
+	}
+#endif
 	// print message.
 	vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
 

@@ -183,6 +183,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
 #endif
+
 		//	送信ステータスなどのLEDのための出力
 #ifdef LITE2525A
 		vPortSetLo(LED);
@@ -216,35 +217,31 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		// configure network
 #ifdef LITE2525A
-		if( sAppData.bFlashLoaded == FALSE ){
-			if( IS_APPCONF_OPT_APP_TWELITE() ){
-				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
-				sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
-			}else{
-				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
-				sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
-			}
+		if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
+			sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
+			sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
 		}else{
-			if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
+			if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID ){
 				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
-				sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
 			}else{
 				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
-				sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
 			}
+			sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
 		}
 #else
 		sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
 		sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
 #endif
 
-		//sToCoNet_AppContext.u8TxMacRetry = 1;
+		sToCoNet_AppContext.u8RandMode = 0;
+
 		sToCoNet_AppContext.bRxOnIdle = FALSE;
 
 		sToCoNet_AppContext.u8CCA_Level = 1;
 		sToCoNet_AppContext.u8CCA_Retry = 0;
 
-		sToCoNet_AppContext.u8TxPower = sAppData.sFlash.sData.u8pow;
+		sAppData.u8Retry = ((sAppData.sFlash.sData.u8pow>>4)&0x0F) + 0x80;		// 強制再送
+		sToCoNet_AppContext.u8TxPower = sAppData.sFlash.sData.u8pow&0x0F;
 
 		// version info
 		sAppData.u32ToCoNetVersion = ToCoNet_u32GetVersion();
@@ -494,9 +491,13 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		//  to check interrupt source, etc.
 
 		sAppData.bWakeupByButton = FALSE;
+		uint32 u32WakeStatus = u32AHI_DioWakeStatus();
 		if(u8AHI_WakeTimerFiredStatus()) {
 		} else
-		if(u32AHI_DioWakeStatus() & u32DioPortWakeUp) {
+		if( ( u32WakeStatus & PORT_INPUT_MASK_ADXL345) && sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
+			sAppData.bWakeupByButton = TRUE;
+		}else
+		if( u32WakeStatus & u32DioPortWakeUp) {
 			// woke up from DIO events
 			sAppData.bWakeupByButton = TRUE;
 		}
@@ -762,6 +763,75 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 #endif
 
 	return;
+}
+
+/**
+ * 通常送信関数
+ *
+ * @param *pu8Data 送信するデータ本体
+ * @param u8Length データ長
+ * @return 送信成功であれば TRUE
+ */
+bool_t bSendMessage( uint8* pu8Data, uint8 u8Length ){
+	bool_t	bOk = TRUE;
+
+	// 暗号化鍵の登録
+	if (IS_APPCONF_OPT_SECURE()) {
+		bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
+		V_PRINTF(LB "*** Register AES key (%d) ***", bRes);
+	}
+
+	// 初期化後速やかに送信要求
+	V_PRINTF(LB"[SNS_COMP/TX]");
+	sAppData.u16frame_count++; // シリアル番号を更新する
+	tsTxDataApp sTx;
+	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
+	uint8 *q =  sTx.auData;
+
+	sTx.u32SrcAddr = ToCoNet_u32GetSerial();
+
+	if (IS_APPCONF_OPT_SECURE()) {
+		sTx.bSecurePacket = TRUE;
+	}
+
+	if (IS_APPCONF_OPT_TO_ROUTER()) {
+		// ルータがアプリ中で一度受信して、ルータから親機に再配送
+		sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
+	} else {
+		// ルータがアプリ中では受信せず、単純に中継する
+		sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
+	}
+
+	// ペイロードの準備
+	S_OCTET('T');
+	S_OCTET(sAppData.sFlash.sData.u8id);
+	S_BE_WORD(sAppData.u16frame_count);
+
+	if( sAppData.sFlash.sData.u8mode == 0xA1 ){
+		S_OCTET(0x35);	// ADXL345 LowEnergy Mode の時、普通のADXL345として送る
+	}else{
+		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子
+	}
+
+	//	センサ固有のデータ
+	memcpy(q,pu8Data,u8Length);
+	q += u8Length;
+
+	sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
+	sTx.u8Len = q - sTx.auData; // パケットのサイズ
+	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
+	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
+	sTx.u8Retry = sAppData.u8Retry;
+
+	//	送信処理
+	bOk = ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx);
+	if ( bOk ) {
+		ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+		V_PRINTF(LB"TxOk");
+	} else {
+		V_PRINTF(LB"TxFl");
+	}
+	return bOk;
 }
 
 /**
