@@ -205,6 +205,9 @@ void vSerOutput_ModbusAscii(tsFILE *psSerStream, uint8 u8addr, uint8 u8cmd, uint
 	int i;
 	uint8 u8lrc = 0;
 
+	// NULL buffer
+	if (pDat == NULL || u16len == 0) return;
+
 	// Header byte
 	vPutChar(psSerStream, ':');
 

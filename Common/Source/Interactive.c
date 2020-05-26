@@ -66,6 +66,8 @@ uint8 au8SerBuffInput[128]; //!< 入力用のシリアルバッファ
 
 static tsFlashApp sConfig_UnSaved; //!< 未セーブ状態の設定情報
 
+static bool_t bInitInteractive = FALSE;
+
 extern void vSerInitMessage();
 extern void vProcessSerialCmd(tsSerCmd_Context *);
 
@@ -88,7 +90,7 @@ void vProcessSerialCmd();
 /***        Procedures                                                    ***/
 /****************************************************************************/
 
-/** @ingroup MASTER
+/**
  * インタラクティブモードの初期化
  */
 void Interactive_vInit() {
@@ -103,11 +105,30 @@ void Interactive_vInit() {
 	// シリアルコマンド処理関数
 	memset(&sSerCmd_P3, 0x00, sizeof(sSerCmd_P3));
 	memset(&sSerCmd, 0x00, sizeof(sSerCmd));
-	// SerCmdChat_vInit(&sSerCmd, au8SerBuffInput, sizeof(au8SerBuffInput)); //! チャットモード (これはインタラクティブモード中の動作と競合する)
-	// SerCmdBinary_vInit(&sSerCmd, au8SerBuffInput, sizeof(au8SerBuffInput)); //!< バイナリモード
-	SerCmdAscii_vInit(&sSerCmd, au8SerBuffInput, sizeof(au8SerBuffInput)); //!< modbus ASCII
 
+	// 入力コマンド形式の設定
+	if (IS_APPCONF_OPT_UART_BIN()) {
+		SerCmdBinary_vInit(&sSerCmd, au8SerBuffInput, sizeof(au8SerBuffInput)); //!< バイナリモード
+	} else {
+		SerCmdAscii_vInit(&sSerCmd, au8SerBuffInput, sizeof(au8SerBuffInput)); //!< modbus ASCII
+	}
+
+	bInitInteractive = TRUE;
 	u16HoldUpdateScreen = 100;
+}
+
+
+/**
+ * インタラクティブモードの再初期化
+ * (UART 初期化前に呼び出す)
+ */
+void Interactive_vReInit() {
+	while (!SERIAL_bRxQueueEmpty(sSerPort.u8SerialPort)) {
+		(void)SERIAL_i16RxChar(sSerPort.u8SerialPort);
+	}
+
+	sSerCmd.u8state = E_SERCMD_EMPTY;
+	sSerCmd_P3.u8state = E_SERCMD_EMPTY;
 }
 
 /**
@@ -124,6 +145,8 @@ bool_t Interactive_bGetMode() {
  * @param u16screen_refresh 再表示までのタイマカウンタ(0なら設定しない、1カウント約16ms)
  */
 void Interactive_vSetMode(bool_t bVerbose, uint16 u16screen_refresh) {
+	if (!bInitInteractive) return;
+
 	sSerCmd_P3.bverbose = bVerbose;
 	if (u16screen_refresh) {
 		u16HoldUpdateScreen = u16screen_refresh;
@@ -228,13 +251,17 @@ void vHandleSerialInput() {
 				if (u8res != E_SERCMD_PLUS3_EMPTY) {
 					if (u8res == E_SERCMD_PLUS3_VERBOSE_ON) {
 						// verbose モードの判定があった
-						vSerUpdateScreen();
-						sSerCmd.u16timeout = 0;
+						if (bInitInteractive) {
+							vSerUpdateScreen();
+							sSerCmd.u16timeout = 0;
+						}
 					}
 
 					if (u8res == E_SERCMD_PLUS3_VERBOSE_OFF) {
-						vfPrintf(&sSerStream, "!INF EXIT INTERACTIVE MODE."LB);
-						sSerCmd.u16timeout = 1000;
+						if (bInitInteractive) {
+							vfPrintf(&sSerStream, "!INF EXIT INTERACTIVE MODE."LB);
+							sSerCmd.u16timeout = 1000;
+						}
 					}
 
 					// still waiting for bytes.
@@ -838,7 +865,7 @@ static void vSerUpdateScreen() {
 #endif
 
 #ifdef ENDDEVICE_INPUT
-	V_PRINTF(" p: set Sleep Dur (%d)%c" LB,
+	V_PRINTF(" d: set Sleep Dur (%d)%c" LB,
 			FL_IS_MODIFIED_u32(Slp) ? FL_UNSAVE_u32(Slp) : FL_MASTER_u32(Slp),
 			FL_IS_MODIFIED_u32(Slp) ? '*' : ' ');
 #endif

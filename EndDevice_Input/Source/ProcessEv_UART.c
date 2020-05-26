@@ -24,15 +24,21 @@
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
+#include "sercmd_gen.h"
+
+tsSerCmd_Context sSerCmdOut; //!< シリアル出力用
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
-static void vStoreSensorValue();
+
+#define PORT_RTS0 (5)
 
 /*
  * ADC 計測をしてデータ送信するアプリケーション制御
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_START_UP) {
+		// 起動メッセージ
 		vSerInitMessage();
+
 		// 暗号化鍵の登録
 		if (IS_APPCONF_OPT_SECURE()) {
 			bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
@@ -45,10 +51,13 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 			ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+
+			// RTS を設定
+			vPortSetLo(PORT_RTS0);
 		} else {
 			// 開始する
 			// start up message
-			V_PRINTF(LB "*** Cold starting");
+			V_PRINTF(LB "*** Cold starting(UART)");
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
 
 			sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ENDDEVICE;
@@ -56,24 +65,54 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig_MiniNodes(&sAppData.sNwkLayerTreeConfig);
 
 			if (sAppData.pContextNwk) {
+				// とりあえず初期化だけしておく
 				ToCoNet_Nwk_bInit(sAppData.pContextNwk);
 				ToCoNet_Nwk_bStart(sAppData.pContextNwk);
 			}
-			ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+			// 直ぐにスリープ
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+
+			// RTS を設定
+			vPortSetHi(PORT_RTS0);
 		}
 
 		// RC クロックのキャリブレーションを行う
 		ToCoNet_u16RcCalib(sAppData.sFlash.sData.u16RcClock);
-	}
 
-	// ADC の取得
-	vADC_WaitInit();
-	vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
+		// PORT を出力状態にする
+		vPortAsOutput(PORT_RTS0);
+	}
 }
 
 PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	if (eEvent == E_EVENT_NEW_STATE) {
+		uint8 au8msg[16], *q = au8msg;
+
+		V_PRINTF(LB "[RUNNING]");
+		V_FLUSH();
+
+		// 起動メッセージとしてシリアル番号を出力する
+		S_BE_DWORD(ToCoNet_u32GetSerial());
+		sSerCmdOut.au8data = au8msg;
+		sSerCmdOut.u16len = q - au8msg;
+
+		sSerCmdOut.vOutput(&sSerCmdOut, &sSerStream);
+	} else
 	if (eEvent == E_ORDER_KICK) {
-		V_PRINTF(LB"[E_STATE_RUNNING/SNS_COMP]");
+		// UARTのコマンドが入力されるまで待って、送信
+		tsSerCmd_Context *pCmd = NULL;
+		if (u32evarg) {
+			pCmd = (void*)u32evarg;
+		}
+
+		if (pCmd && pCmd->u16len <= 80) {
+			; // この場合は処理する
+		} else {
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+			return;
+		}
+
+		V_PRINTF(LB"[RUNNING/UARTRECV ln=%d]", pCmd->u16len);
 		sAppData.u16frame_count++; // シリアル番号を更新する
 
 		tsTxDataApp sTx;
@@ -81,11 +120,6 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		uint8 *q =  sTx.auData;
 
 		sTx.u32SrcAddr = ToCoNet_u32GetSerial();
-
-		sTx.u16DelayMin = 0;
-		sTx.u16DelayMax = 0;
-		sTx.u16RetryDur = 0;
-		sTx.u8Retry = 0;
 
 		if (IS_APPCONF_OPT_TO_ROUTER()) {
 			// ルータがアプリ中で一度受信して、ルータから親機に再配送
@@ -100,13 +134,10 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		S_OCTET(sAppData.sFlash.sData.u8id);
 		S_BE_WORD(sAppData.u16frame_count);
 
-		S_OCTET(PKT_ID_STANDARD); // パケット識別子
-
-		S_OCTET(sAppData.sSns.u8Batt);
-		S_BE_WORD(sAppData.sSns.u16Adc1);
-		S_BE_WORD(sAppData.sSns.u16Adc2);
-		S_BE_WORD(sAppData.sSns.u16PC1);
-		S_BE_WORD(sAppData.sSns.u16PC2);
+		S_OCTET(PKT_ID_UART); // パケット識別子
+		S_OCTET(pCmd->u16len); // ペイロードサイズ
+		memcpy(q, pCmd->au8data, pCmd->u16len); // データ部
+		q += pCmd->u16len;
 
 		sTx.u8Len = q - sTx.auData; // パケットのサイズ
 		sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
@@ -129,16 +160,33 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 	}
+
+	// タイムアウト
+	if (ToCoNet_Event_u32TickFrNewState(pEv) > sAppData.sFlash.sData.u32Slp) {
+		V_PRINTF(LB"! TIME OUT (E_STATE_RUNNING)");
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+	}
 }
 
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_ORDER_KICK) { // 送信完了イベントが来たのでスリープする
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 	}
+	// タイムアウト
+	if (ToCoNet_Event_u32TickFrNewState(pEv) > 100) {
+		V_PRINTF(LB"! TIME OUT (E_STATE_APP_WAIT_TX)");
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+	}
 }
 
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
+		// センサー用の電源制御回路を Hi に戻す
+		vPortSetHi(DIO_SNS_POWER);
+
+		// RTS0 を通信禁止にする
+		vPortSetHi(PORT_RTS0);
+
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
 		V_PRINTF(LB"Sleeping...");
 		V_FLUSH();
@@ -146,9 +194,8 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
-		// 周期スリープに入る
-		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒
-		vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
+		// スリープ状態に遷移
+		vSleep(0, FALSE, FALSE);
 	}
 }
 
@@ -204,6 +251,7 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 }
 #endif
 
+#if 0
 /**
  * ハードウェアイベント（遅延実行）
  * @param u32DeviceId
@@ -215,16 +263,6 @@ static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		break;
 
 	case E_AHI_DEVICE_ANALOGUE:
-		/*
-		 * ADC完了割り込み
-		 */
-		V_PUTCHAR('@');
-		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
-		if (bSnsObj_isComplete(&sAppData.sADC)) {
-			// 全チャネルの処理が終わったら、次の処理を呼び起こす
-			vStoreSensorValue();
-			ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
-		}
 		break;
 
 	case E_AHI_DEVICE_SYSCTRL:
@@ -237,8 +275,9 @@ static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		break;
 	}
 }
+#endif
 
-#if 0
+#if 1
 /**
  * メイン処理
  */
@@ -285,14 +324,22 @@ static void cbAppToCoNet_vTxEvent(uint8 u8CbId, uint8 bStatus) {
 	// 送信完了
 	ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
 }
+
+/**
+ * UART コマンド
+ */
+static void cb_vProcessSerialCmd(tsSerCmd_Context *pCmd) {
+	ToCoNet_Event_Process(E_ORDER_KICK, (uint32)(void *)pCmd, vProcessEvCore);
+}
+
 /**
  * アプリケーションハンドラー定義
  *
  */
 static tsCbHandler sCbHandler = {
 	NULL, // cbAppToCoNet_u8HwInt,
-	cbAppToCoNet_vHwEvent,
-	NULL, // cbAppToCoNet_vMain,
+	NULL, // cbAppToCoNet_vHwEvent,
+	cbAppToCoNet_vMain,
 	NULL, // cbAppToCoNet_vNwkEvent,
 	NULL, // cbAppToCoNet_vRxEvent,
 	cbAppToCoNet_vTxEvent
@@ -301,40 +348,15 @@ static tsCbHandler sCbHandler = {
 /**
  * アプリケーション初期化
  */
-void vInitAppStandard() {
+void vInitAppUart() {
 	psCbHandler = &sCbHandler;
 	pvProcessEv1 = vProcessEvCore;
-}
+	pf_cbProcessSerialCmd = cb_vProcessSerialCmd;
 
-
-/**
- * センサー値を格納する
- */
-static void vStoreSensorValue() {
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_0, &sAppData.sSns.u16PC1); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_0); // 16bitの場合
-
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_1, &sAppData.sSns.u16PC2); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
-
-	// センサー値の保管
-	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
-#ifdef USE_TEMP_INSTDOF_ADC2
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
-#else
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
-#endif
-	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
-
-	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする
-	if (sAppData.sSns.u16Adc1 >= VOLT_SUPERCAP_CONTROL) {
-		vPortSetLo(DIO_SUPERCAP_CONTROL);
+	// シリアルの書式出力のため
+	if (IS_APPCONF_OPT_UART_BIN()) {
+		SerCmdBinary_vInit(&sSerCmdOut, NULL, 128); // バッファを指定せず初期化
+	} else {
+		SerCmdAscii_vInit(&sSerCmdOut, NULL, 128); // バッファを指定せず初期化
 	}
-
-	// センサー用の電源制御回路を Hi に戻す
-	vPortSetHi(DIO_SNS_POWER);
 }

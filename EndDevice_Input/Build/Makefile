@@ -47,7 +47,11 @@ include ../Version.mk
 APPSRC += $(TARGET_DIR).c
 APPSRC += common.c
 APPSRC += flash.c
+
 APPSRC += adc.c
+APPSRC += SMBus.c
+APPSRC += BH1715.c
+APPSRC += SHT21.c
 APPSRC += sensor_driver.c
 
 APPSRC += Interactive.c
@@ -62,6 +66,8 @@ APPSRC += ProcessEv_Standard.c
 APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
+APPSRC += ProcessEv_SHT21.c
+APPSRC += ProcessEv_UART.c
 
 ### Target type
 # アプリケーション(.bin)をビルドするか、ライブラリ(.a)にするか指定します。
@@ -108,7 +114,7 @@ CFLAGS += -DENDDEVICE_INPUT
 # 下記に指定したディレクトリがソース検索パス、インクルード検索パスに設定
 # されます。Makefile のあるディレクトリからの相対パスを指定します。
 #
-#APP_COMMON_SRC_DIR_ADD1 = ../dummy1  
+APP_COMMON_SRC_DIR_ADD1 = ../../Common/Sensor  
 #APP_COMMON_SRC_DIR_ADD2 = 
 #APP_COMMON_SRC_DIR_ADD3 = 
 #APP_COMMON_SRC_DIR_ADD4 =

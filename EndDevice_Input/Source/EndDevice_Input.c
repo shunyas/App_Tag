@@ -48,6 +48,7 @@
 #include "common.h"
 
 #include "adc.h"
+#include "SMBus.h"
 
 // Serial options
 #include "serial.h"
@@ -105,6 +106,9 @@ tsAppData_Ed sAppData;
 tsFILE sSerStream;
 tsSerialPortSetup sSerPort;
 
+void *pvProcessEv1, *pvProcessEv2;
+void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
+
 /****************************************************************************/
 /***        Functions                                                     ***/
 /****************************************************************************/
@@ -115,6 +119,9 @@ tsSerialPortSetup sSerPort;
 void cbAppColdStart(bool_t bAfterAhiInit) {
 	if (!bAfterAhiInit) {
 		// before AHI initialization (very first of code)
+		pvProcessEv1 = NULL;
+		pvProcessEv2 = NULL;
+		pf_cbProcessSerialCmd = NULL;
 
 		// check DIO source
 		sAppData.bWakeupByButton = FALSE;
@@ -128,13 +135,20 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		// Module Registration
 		ToCoNet_REG_MOD_ALL();
 	} else {
+		// disable brown out detect
+		vAHI_BrownOutConfigure(0,//0:2.0V 1:2.3V
+				FALSE,
+				FALSE,
+				FALSE,
+				FALSE);
+
 		// リセットICの無効化
 		vPortSetLo(DIO_VOLTAGE_CHECKER);
 		vPortAsOutput(DIO_VOLTAGE_CHECKER);
 		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
 
 		// センサー用の制御 (Lo:Active)
-		vPortSetHi(DIO_SNS_POWER);
+		vPortSetLo(DIO_SNS_POWER);
 		vPortAsOutput(DIO_SNS_POWER);
 
 		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用
@@ -163,8 +177,8 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		//sToCoNet_AppContext.u8TxMacRetry = 1;
 		sToCoNet_AppContext.bRxOnIdle = FALSE;
 
-		//sToCoNet_AppContext.u8CCA_Level = 1;
-		//sToCoNet_AppContext.u8CCA_Retry = 0;
+		sToCoNet_AppContext.u8CCA_Level = 1;
+		sToCoNet_AppContext.u8CCA_Retry = 0;
 
 		sToCoNet_AppContext.u8TxPower = sAppData.sFlash.sData.u8pow;
 
@@ -185,7 +199,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppConfig();
-			ToCoNet_Event_Register_State_Machine(vProcessEvCoreConfig); // デバッグ用の動作マシン
 
 			// インタラクティブモードの初期化
 			Interactive_vInit();
@@ -201,8 +214,31 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppDoorTimer();
-			ToCoNet_Event_Register_State_Machine(vProcessEvCore_Door_Timer); // main state machine
-			ToCoNet_Event_Register_State_Machine(vProcessEvCore_Door_Timer_Nwk); // main state machine
+		} else
+		if (IS_APPCONF_OPT_SHT21()) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppSHT21();
+		} else
+		if (IS_APPCONF_OPT_UART()) {
+			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// UART 処理
+			vInitAppUart();
+
+			// インタラクティブモード
+			Interactive_vInit();
 		} else {
 			// 通常アプリで起動
 			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
@@ -217,7 +253,14 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppStandard();
-			ToCoNet_Event_Register_State_Machine(vProcessEvCore); // main state machine
+		}
+
+		// イベント処理関数の登録
+		if (pvProcessEv1) {
+			ToCoNet_Event_Register_State_Machine(pvProcessEv1);
+		}
+		if (pvProcessEv2) {
+			ToCoNet_Event_Register_State_Machine(pvProcessEv2);
 		}
 
 		// ToCoNet DEBUG
@@ -243,8 +286,18 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 			sAppData.bWakeupByButton = TRUE;
 		}
 	} else {
+		// disable brown out detect
+		vAHI_BrownOutConfigure(0,//0:2.0V 1:2.3V
+				FALSE,
+				FALSE,
+				FALSE,
+				FALSE);
+
 		// Other Hardware
+		Interactive_vReInit();
 		vSerialInit();
+
+		// TOCONET DEBUG
 		ToCoNet_vDebugInit(&sSerStream);
 		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
@@ -337,8 +390,14 @@ static void vInitADC() {
 	// ADC
 	vADC_Init(&sAppData.sObjADC, &sAppData.sADC, TRUE);
 	sAppData.u8AdcState = 0xFF; // 初期化中
+
+#ifdef USE_TEMP_INSTDOF_ADC2
+	sAppData.sObjADC.u8SourceMask =
+			TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_TEMP;
+#else
 	sAppData.sObjADC.u8SourceMask =
 			TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_ADC_2;
+#endif
 }
 
 /**
@@ -384,9 +443,6 @@ static void vInitPulseCounter() {
  * @param f_warm_start TRUE:スリープ起床時
  */
 static void vInitHardware(int f_warm_start) {
-	// センサー用の電源制御回路を LO に設定する
-	vPortSetLo(DIO_SNS_POWER);
-
 	// 入力ポートを明示的に指定する
 	vPortAsInput(DIO_BUTTON);
 
@@ -398,11 +454,10 @@ static void vInitHardware(int f_warm_start) {
 # ifndef JN516x
 #  warning "IO_TIMER is not implemented on JN514x"
 # endif
-		memset(&sTimerPWM[0], 0, sizeof(tsTimerContext));
 # ifdef JN516x
+		memset(&sTimerPWM[0], 0, sizeof(tsTimerContext));
 		vAHI_TimerFineGrainDIOControl(0x7); // bit 0,1,2 をセット (TIMER0 の各ピンを解放する, PWM1..4 は使用する)
 		vAHI_TimerSetLocation(E_AHI_TIMER_1, TRUE, TRUE); // IOの割り当てを設定
-# endif
 
 		// PWM
 		int i;
@@ -422,6 +477,13 @@ static void vInitHardware(int f_warm_start) {
 			vTimerConfig(&sTimerPWM[i]);
 			vTimerStart(&sTimerPWM[i]);
 		}
+# endif
+	}
+
+	// SMBUS の初期化
+
+	if (IS_APPCONF_OPT_SHT21()) {
+		vSMBusInit();
 	}
 }
 
@@ -465,6 +527,12 @@ void vSerInitMessage() {
  * @param pCmd
  */
 void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
+	// アプリのコールバックを呼び出す
+	if (pf_cbProcessSerialCmd) {
+		(*pf_cbProcessSerialCmd)(pCmd);
+	}
+
+#if 0
 	V_PRINTF(LB "! cmd len=%d data=", pCmd->u16len);
 	int i;
 	for (i = 0; i < pCmd->u16len && i < 8; i++) {
@@ -473,6 +541,7 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 	if (i < pCmd->u16len) {
 		V_PRINTF("...");
 	}
+#endif
 
 	return;
 }

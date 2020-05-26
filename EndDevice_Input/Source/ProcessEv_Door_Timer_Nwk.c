@@ -24,6 +24,8 @@
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
+
 /**
  * FIREイベントを受けとたら、動作開始
  * @param E_STATE_IDLE
@@ -149,6 +151,13 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
  * @param eEvent
  * @param u32evarg
  */
-void vProcessEvCore_Door_Timer_Nwk(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	ToCoNet_Event_StateExec(asStateFuncTbl, pEv, eEvent, u32evarg);
+}
+
+/**
+ * 初期化２
+ */
+void vInitAppDoorTimerSub() {
+	pvProcessEv2 = vProcessEvCore;
 }

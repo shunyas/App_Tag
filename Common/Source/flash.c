@@ -112,10 +112,10 @@ bool_t bFlash_Write(tsFlash *psFlash, uint8 sector, uint32 offset)
  */
 bool_t bFlash_Erase(uint8 sector)
 {
-	int i;
     bool_t bRet = FALSE;
 
 #ifdef USE_EEPROM
+	int i;
     // EEPROM の全領域をクリアする。セグメント単位で消去する
     uint8 au8buff[EEPROM_6X_SEGMENT_SIZE];
     memset (au8buff, 0xFF, EEPROM_6X_SEGMENT_SIZE);

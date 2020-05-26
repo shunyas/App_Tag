@@ -42,10 +42,13 @@ extern const uint8 au8EncKey[];
  */
 #define PKT_ID_STANDARD 1
 #define PKT_ID_IO_TIMER 2
+#define PKT_ID_SHT21 3
+#define PKT_ID_UART 4
 
 /*
  * 標準ポート定義 (TWE-Lite DIP)
  */
+#if defined(JN516x)
 #define PORT_OUT1 18
 #define PORT_OUT2 19
 #define PORT_OUT3 4
@@ -59,5 +62,21 @@ extern const uint8 au8EncKey[];
 #define PORT_CONF3 3
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
+#endif
+#if defined(JN514x)
+#define PORT_OUT1 PORT_KIT_LED1
+#define PORT_OUT2 PORT_KIT_LED2
+#define PORT_OUT3 PORT_KIT_LED3
+#define PORT_OUT4 PORT_KIT_LED4
+#define PORT_INPUT1 PORT_KIT_SW2
+#define PORT_INPUT2 5
+#define PORT_INPUT3 PORT_KIT_SW3
+#define PORT_INPUT4 PORT_KIT_SW4
+#define PORT_CONF1 1
+#define PORT_CONF2 PORT_KIT_SW1
+#define PORT_CONF3 8
+#define PORT_BAUD 12
+#define PORT_UART0_RX 7
+#endif
 
 #endif /* COMMON_H_ */

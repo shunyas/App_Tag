@@ -70,3 +70,21 @@
 #define E_APPCONF_OPT_DOOR_TIMER 0x00000010UL
 #define IS_APPCONF_OPT_DOOR_TIMER() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_DOOR_TIMER) != 0) //!< E_APPCONF_OPT_DOOR_TIMER 判定
 
+/**
+ * SHT21 センサーを有効にする(子機の場合)
+ * SHT21 センサー時の出力を SimpleTag v3 互換のセミコロン区切りにする(親機)
+ */
+#define E_APPCONF_OPT_SHT21 0x00000020UL
+#define IS_APPCONF_OPT_SHT21() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_SHT21) != 0) //!< E_APPCONF_OPT_SHT21 判定
+
+/**
+ * UARTアプリを有効にする
+ */
+#define E_APPCONF_OPT_UART 0x00000100UL
+#define IS_APPCONF_OPT_UART() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_UART) != 0) //!< E_APPCONF_OPT_UART 判定
+
+/**
+ * バイナリモード
+ */
+#define E_APPCONF_OPT_UART_BIN 0x00000200UL
+#define IS_APPCONF_OPT_UART_BIN() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_UART_BIN) != 0) //!< E_APPCONF_OPT_UART_BIN 判定

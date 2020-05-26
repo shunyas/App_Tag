@@ -19,10 +19,23 @@
 
 
 #include "jendefs.h"
+#include <string.h>
+
 #include <AppHardwareApi.h>
 
+#include "ToCoNet.h"
 #include "ToCoNet_event.h"
 #include "sensor_driver.h"
+
+/** @ingroup SNSDRV
+ * センサー状態マシンを初期化する
+ *
+ * @param pObj 管理構造体
+ */
+void vSnsObj_Init(tsSnsObj *pObj) {
+	memset(pObj, 0, sizeof(tsSnsObj));
+	pObj->u8TickDelta = 1000 / sToCoNet_AppContext.u16TickHz;
+}
 
 /** @ingroup SNSDRV
  *

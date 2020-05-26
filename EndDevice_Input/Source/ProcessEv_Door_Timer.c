@@ -24,6 +24,8 @@
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
+
 static void vSleep_IO_Timer(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep);
 extern tsTimerContext sTimerPWM[1]; //!< タイマー管理構造体  @ingroup MASTER
 
@@ -147,6 +149,9 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
  */
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
+		// センサー用の電源制御回路を Hi に戻す
+		vPortSetHi(DIO_SNS_POWER);
+
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
 		V_PRINTF(LB"Sleeping...");
 
@@ -221,7 +226,7 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
  * @param eEvent
  * @param u32evarg
  */
-void vProcessEvCore_Door_Timer(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	ToCoNet_Event_StateExec(asStateFuncTbl, pEv, eEvent, u32evarg);
 }
 
@@ -345,4 +350,8 @@ static tsCbHandler sCbHandler = {
  */
 void vInitAppDoorTimer() {
 	psCbHandler = &sCbHandler;
+	pvProcessEv1 = vProcessEvCore;
+
+	extern void vInitAppDoorTimerSub();
+	vInitAppDoorTimerSub();
 }

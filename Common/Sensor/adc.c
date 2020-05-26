@@ -39,6 +39,10 @@ extern tsFILE sSerStream;
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+#undef USE_TEMP_RAW // 温度センサーの値を ADC 生値 (但し 12bit 拡張) で記録
+#ifdef USE_TEMP_RAW
+# warning "EXPERIMENTAL: USE_TEMP_RAW"
+#endif
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -82,7 +86,7 @@ PRIVATE const uint8 au8AdcSrcTable[TEH_ADC_IDX_END] = {
  * @param bInitAPR TRUEならアナログ部の電源投入初期化処理を行う
  */
 void vADC_Init(tsObjData_ADC *pData, tsSnsObj *pSnsObj, bool_t bInitAPR) {
-	pSnsObj->u8State = E_SNSOBJ_STATE_IDLE;
+	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
 	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_ADC;
@@ -218,6 +222,7 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 			pObj->ai16Result[pObj->u8IdxMeasuruing] = (int16)u16AHI_AdcRead();
 
 #ifdef JN516x
+			// 10bit を12bit にシフトしておく (12bit ADC の計算式と混在するとややこしいので)
 			pObj->ai16Result[pObj->u8IdxMeasuruing] <<= 2; // convert to 12bit
 #endif
 #ifdef SERIAL_DEBUG
@@ -246,8 +251,8 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 			// 内蔵温度センサーの変換 (ADCVAL -> 100x degC 23.55℃なら 2355 に変換する)
 			if (   pObj->u8IdxMeasuruing == TEH_ADC_IDX_TEMP
 				&& !IS_SENSOR_TAG_DATA_ERR(pObj->ai16Result[TEH_ADC_IDX_TEMP])) {
+#ifndef USE_TEMP_RAW // USE_TEMP_RAW が定義された場合は、そのままの AD 値を採用
 				int16 i16AdcVal = pObj->ai16Result[TEH_ADC_IDX_TEMP];
-
 #ifdef JN514x
 				pObj->ai16Result[TEH_ADC_IDX_TEMP] =
 					(25000L - (((int32)(i16AdcVal - 2560L)) * 183L) + 5L) / 10L; // in 100x degC
@@ -258,6 +263,7 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 				pObj->ai16Result[TEH_ADC_IDX_TEMP] =
 					(25000L - (((int32)(i16AdcVal - 2421L)) * 177L) + 5L) / 10L; // in 100x degC
 #endif
+#endif // USE_TEMP_RAW
 			} else {
 				// ADC1-4の値。mVで計算する。
 				//   514x(Regular/Strong) と 516x(Lite) ではバンドギャップ電圧が違うので計算式も違う。

@@ -197,6 +197,9 @@ static void SerCmdBinary_Output(tsSerCmd_Context *pc, tsFILE *ps) {
 	int i;
 	uint8 u8xor = 0;
 
+	// NULL buffer
+	if (pc == NULL || pc->au8data == NULL || pc->u16len == 0) return;
+
 	vPutChar(ps, SERCMD_SYNC_1);
 	vPutChar(ps, SERCMD_SYNC_2);
 	vPutChar(ps, (uint8)(0x80 | (pc->u16len >> 8)));

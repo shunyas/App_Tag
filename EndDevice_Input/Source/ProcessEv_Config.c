@@ -24,10 +24,12 @@
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
+
 /**
  * 設定処理用の状態マシン(特に何もしない。SERIAL の入力で何かする)
  */
-void vProcessEvCoreConfig(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	switch (pEv->eState) {
 		case E_STATE_IDLE:
 			if (eEvent == E_EVENT_START_UP) {
@@ -75,4 +77,5 @@ static tsCbHandler sCbHandler = {
  */
 void vInitAppConfig() {
 	psCbHandler = &sCbHandler;
+	pvProcessEv1 = vProcessEvCore;
 }

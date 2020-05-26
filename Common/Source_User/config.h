@@ -64,6 +64,21 @@ extern "C" {
  */
 #define DEFAULT_SLEEP_DUR_ms (5000UL)
 
+/**
+ * 温度センサーの利用
+ */
+#undef USE_TEMP_INSTDOF_ADC2
+
+/**
+ * DIO_SUPERCAP_CONTROL の制御閾値
+ *
+ * - ADC1 に二次電池・スーパーキャパシタの電圧を 1/2 に分圧して入力
+ * - 本定義の電圧以上になると、DIO_SUPERCAP_CONTROL を LO に設定する
+ *   (1300なら 2.6V を超えた時点で IO が LO になる)
+ * - 外部の電源制御回路の制御用
+ */
+#define VOLT_SUPERCAP_CONTROL 1300
+
 /*************************************************************************/
 /***        TARGET PCB                                                 ***/
 /*************************************************************************/
@@ -72,7 +87,7 @@ extern "C" {
 #define DIO_SUPERCAP_CONTROL (PORT_OUT2) // DO2: SUPER CAP の電圧が上昇すると LO に設定
 #define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
 
-#define PORT_INPUT_MASK (1UL << PORT_UART0_RX | 1UL <<  PORT_INPUT1 | 1UL << PORT_CONF3)
+#define PORT_INPUT_MASK ((1UL << PORT_UART0_RX) | (1UL <<  DIO_BUTTON))
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/

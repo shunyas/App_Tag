@@ -388,20 +388,20 @@
 		<configuration configurationName="EndDevice_Input (JN5148)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
+		<configuration configurationName="Parent (JN5164)">
+			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
+		</configuration>
 		<configuration configurationName="UART_Slave">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_UART"/>
 		</configuration>
 		<configuration configurationName="EndDevice">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
 		</configuration>
-		<configuration configurationName="Parent (JN5164)">
-			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
-		</configuration>
 		<configuration configurationName="EndDevice_Input"/>
-		<configuration configurationName="Router (JN5164)">
+		<configuration configurationName="Router (JN5148)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
-		<configuration configurationName="Router (JN5148)">
+		<configuration configurationName="Router (JN5164)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
 		</configuration>
 		<configuration configurationName="EndDevice_Remote (JN5164)">
@@ -413,11 +413,11 @@
 		<configuration configurationName="UART_Master">
 			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_UART"/>
 		</configuration>
-		<configuration configurationName="Router">
-			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
-		</configuration>
 		<configuration configurationName="EndDevice_Remote (JN5148)">
 			<resource resourceType="PROJECT" workspacePath="/Samp_Monitor"/>
+		</configuration>
+		<configuration configurationName="Router">
+			<resource resourceType="PROJECT" workspacePath="/ToCoSamp_template"/>
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings">

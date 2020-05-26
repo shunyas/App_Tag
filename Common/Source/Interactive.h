@@ -47,6 +47,7 @@
  * プロトタイプ宣言
  *************************************************************************/
 void Interactive_vInit();
+void Interactive_vReInit();
 void Interactive_vSetMode(bool_t bVerbose, uint16 u16screen_refresh);
 bool_t Interactive_bGetMode();
 
@@ -61,7 +62,7 @@ extern void vProcessSerialCmd(tsSerCmd_Context *pCmd);
  *************************************************************************/
 #define V_PRINTF(...) if (Interactive_bGetMode() || IS_APPCONF_OPT_VERBOSE()) vfPrintf(&sSerStream,__VA_ARGS__)
 #define V_PUTCHAR(c) if (Interactive_bGetMode()  || IS_APPCONF_OPT_VERBOSE()) (&sSerStream)->bPutChar(sSerStream.u8Device, c)
-#define V_FLUSH() if (Interactive_bGetMode()     || IS_APPCONF_OPT_VERBOSE()) SERIAL_vFlush(UART_PORT)
+#define V_FLUSH() if (Interactive_bGetMode()     || IS_APPCONF_OPT_VERBOSE()) WAIT_UART_OUTPUT(UART_PORT)
 
 #define A_PRINTF(...) if (!Interactive_bGetMode()) vfPrintf(&sSerStream,__VA_ARGS__)
 #define A_PUTCHAR(c) if (!Interactive_bGetMode() ) (&sSerStream)->bPutChar(sSerStream.u8Device, c)

@@ -51,18 +51,14 @@ typedef enum
  */
 typedef struct {
 	uint8 u8State; //!< 状態
+	uint8 u8TickDelta; //!< TICKTIMER での経過ms
 
 	void *pvData; //!< センサーデータへのポインタ
 	bool_t (*pvProcessSnsObj)(void *, teEvent); //!< イベント処理構造体
 } tsSnsObj;
 
-/** @ingroup SNSDRV
- * センサー状態マシンを駆動する。
- *
- * @param pObj 管理構造体
- * @param eEv イベント(イベントの種別は状態マシンにより決められるが、汎用的に ToCoNet で定義される E_EVENT_NEW_STATE/E_ORDER_KICK が使用される)
- */
 void vSnsObj_Process(tsSnsObj *pObj, teEvent eEv);
+void vSnsObj_Init(tsSnsObj *pObj);
 
 #define vSnsObj_NewState(o, s) ((o)->u8State = (s)) //!< 新しい状態へ遷移する @ingroup SNSDRV
 #define bSnsObj_isComplete(o) ((o)->u8State == E_SNSOBJ_STATE_COMPLETE) //!< 完了状態か判定する @ingroup SNSDRV

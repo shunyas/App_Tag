@@ -45,6 +45,8 @@ extern "C" {
 
 #include "appdata.h"
 
+#include "sercmd_gen.h"
+
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
@@ -89,15 +91,14 @@ typedef struct _sCbHandler {
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
-void vProcessEvCore_Door_Timer(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
-void vProcessEvCore_Door_Timer_Nwk(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
-void vProcessEvCoreConfig(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
+extern void *pvProcessEv1, *pvProcessEv2;
+extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 
 void vInitAppStandard();
+void vInitAppSHT21();
 void vInitAppDoorTimer();
+void vInitAppUart();
 void vInitAppConfig();
-
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/

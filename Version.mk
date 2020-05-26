@@ -1,7 +1,10 @@
 VERSION_MAIN = 1
-VERSION_SUB  = 0
-VERSION_VAR  = 1
+VERSION_SUB  = 2
+VERSION_VAR  = 2
 
+# 1.2.2 ソースコードメンテ
+# 1.2.1 UART 送信デモ対応, SimpleTagV3形式出力, B/O検出無効化
+# 1.1.1 SHT21 センサー対応
 # 1.0.1 ソースメンテナンス(EdInp)、暗号化の設定機能追加
 # 0.9.3 App_UART の UART コマンド処理部を Interactive.c に移植（現時点ではコマンドは未定義）
 # 0.9.2 ソースコードのメンテナンス, IO_TIMER を設定で有効に

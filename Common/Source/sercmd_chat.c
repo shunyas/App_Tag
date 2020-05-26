@@ -140,6 +140,9 @@ uint8 SerCmdChat_u8Parse(tsSerCmd_Context *pCmd, uint8 u8byte) {
 static void SerCmdChat_Output(tsSerCmd_Context *pc, tsFILE *ps) {
 	int i;
 
+	// NULL buffer
+	if (pc == NULL || pc->au8data == NULL || pc->u16len == 0) return;
+
 	for (i = 0; i < pc->u16len; i++) {
 		vPutChar(ps, pc->au8data[i]);
 	}
