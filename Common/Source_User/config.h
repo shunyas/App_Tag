@@ -114,6 +114,11 @@ extern "C" {
 
 #define LED (5)
 
+#define SETTING_BIT1 8
+#define SETTING_BIT2 9
+#define SETTING_BIT3 10
+#define SETTING_BIT4 16
+
 #define PORT_INPUT_MASK ( 1UL << DIO_BUTTON )
 #define PORT_INPUT_SUBMASK ( 1UL << PORT_INPUT2 )
 #define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON) | (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))

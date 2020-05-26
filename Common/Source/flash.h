@@ -6,7 +6,8 @@
 #define FLASH_H_
 
 #define FLASH_TYPE E_FL_CHIP_INTERNAL
-#define FLASH_SECTOR_SIZE (32L* 1024L) // 32KB
+#define FLASH_SECTOR_SIZE (128L) // 128B
+//#define FLASH_SECTOR_SIZE (32L* 1024L) // 32KB
 #define FLASH_SECTOR_NUMBER 5 // 0..4
 
 #include "appsave.h"

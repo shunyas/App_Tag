@@ -73,7 +73,8 @@ bool_t bADXL345_AirVolume_Setting()
 {
 	bool_t bOk = TRUE;
 
-	uint8 com = 0x0A;		//	100Hz Sampling frequency
+	//uint8 com = 0x0A;		//	100Hz Sampling frequency
+	uint8 com = 0x09;		//	50Hz Sampling frequency
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
@@ -182,9 +183,12 @@ PUBLIC bool_t b16ADXL345_AirVolumeSingleReadResult( int16* ai16accel )
 /****************************************************************************/
 bool_t bSetFIFO_Air( void )
 {
+	uint8 com;
+	bool_t bOk = TRUE;
+
 	//	FIFOの設定をもう一度
-	uint8 com = 0x00 | 0x20 | READ_FIFO_AIR;
-	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+//	com = 0x00 | 0x20 | READ_FIFO_AIR;
+//	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	com = 0xC0 | 0x20 | READ_FIFO_AIR;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	//	有効にする割り込みの設定
@@ -199,6 +203,9 @@ bool_t bSetActive(void)
 {
 	uint8 com;
 	bool_t bOk = TRUE;
+	// FIFOを止める
+	com = 0x00 | 0x20 | READ_FIFO_AIR;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	//	動いていることを判断するための閾値
 	com = 0x07;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );

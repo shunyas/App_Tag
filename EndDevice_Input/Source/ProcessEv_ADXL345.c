@@ -158,7 +158,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
 			bADXL345reset();
-			bADXL345_Setting( sAppData.sFlash.sData.i16param&0x03FF, sAppData.sFlash.sData.uParam.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
+			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.uParam.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
 			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap != 0 ){
 				au16ThTable[0] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap;
 			}
@@ -282,8 +282,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 					bNoChangePkt = FALSE;
 				}
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
-			}
-			else{
+			}else{
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
 			}
 		}else{
@@ -799,16 +798,14 @@ static bool_t bSendToAppTweLite(){
 					IOMap += 1<<2;
 					bLightOff = TRUE;
 				}
-				else
-					if( bIS_DTAP() ){
-						IOMap += 1<<1;
-						bLightOff = TRUE;
-					}
-					else
-						if( bIS_TAP() ){
-							IOMap += 1;
-							bLightOff = TRUE;
-						}
+				else if( bIS_DTAP() ){
+					IOMap += 1<<1;
+					bLightOff = TRUE;
+				}
+				else if( bIS_TAP() ){
+					IOMap += 1;
+					bLightOff = TRUE;
+				}
 			}
 			IOMap += bIS_INACTIVE() ? 0 : bIS_ACTIVE() ? 1<<3 : 0;
 
@@ -853,10 +850,14 @@ static bool_t bSendToSampMonitor( void ){
 		q += u8TmpLength;
 		V_PRINTF(LB"Send Same Pakket.");
 	}else{
+		uint8 u8source;
+		bSMBusWrite( ADXL345_ADDRESS, ADXL345_ACT_TAP_STATUS, 0, NULL );
+		bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+
 		sAppData.u16frame_count++;
 		S_OCTET(sAppData.sSns.u8Batt);
-		S_BE_WORD(sAppData.sSns.u16Adc1);
-		S_BE_WORD(sAppData.sSns.u16Adc2);
+		S_BE_WORD(sAppData.sSns.u16Adc1|((u8source&0x0F)<<12));
+		S_BE_WORD(sAppData.sSns.u16Adc2|((u8source&0xF0)<<8));
 		if( sAppData.sFlash.sData.i16param&DICE ){
 			S_BE_WORD(u8PlayDice( sObjADXL345.ai16Result));
 			S_BE_WORD(0x0000);
@@ -1013,7 +1014,7 @@ static uint8 u8PlayDice( int16* accel )
 
 
 /**
- *		振る強さを9段階(0-8)で返す
+ *		振る強さを5段階(0-4)で返す
  *		-16000mg～16000mgの値域の標準偏差の最大値がだいたい2000強(実験的)
  */
 static uint8 u8ShakePower( int16* accel )
@@ -1085,4 +1086,12 @@ void vRead_Register( void )
 	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_TIME_INACT, 0, NULL );
 	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
 	V_PRINTF( LB"TII = %02X, %d", u8source, u8source );
+
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_TAP_AXES, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	V_PRINTF( LB"TAX = %02X", u8source );
+
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	V_PRINTF( LB"TAX = %02X", u8source, u8source );
 }

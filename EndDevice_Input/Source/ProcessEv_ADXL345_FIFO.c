@@ -19,6 +19,8 @@ static void vStoreSensorValue();
 static void vProcessADXL345_FIFO(teEvent eEvent);
 static uint8 u8sns_cmplt = 0;
 
+static uint8 u8GetCount = 0;
+
 static tsSnsObj sSnsObj;
 static tsObjData_ADXL345 sObjADXL345;
 
@@ -33,6 +35,7 @@ enum {
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	static bool_t bFirst = TRUE;
+	static bool_t bFIFO_Measuring = FALSE;
 	if (eEvent == E_EVENT_START_UP) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -56,9 +59,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_FIFO_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 FIFO Setting...");
-			bFirst = FALSE;
 			bADXL345reset();
-			bADXL345_FIFO_Setting(sAppData.sFlash.sData.uParam.sADXL345Param.u16Duration);
+			bADXL345_FIFO_Setting( (uint16)(sAppData.sFlash.sData.i16param&0xFFFF), sAppData.sFlash.sData.uParam.sADXL345Param );
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
@@ -69,12 +71,48 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			return;
 		}
 
-			// ADC の取得
-		vADC_WaitInit();
-		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
+		if( sAppData.bWakeupByButton || bFirst ){
+			V_PRINTF(LB"Interrupt:0x%02X", sObjADXL345.u8Interrupt);
+			if( (sAppData.sFlash.sData.i16param&0xF) && !bFirst ){
+				if( sObjADXL345.u8Interrupt&0x74 ){
+					if( bFIFO_Measuring && sAppData.sFlash.sData.u8wait == 0 ){
+						bFIFO_Measuring = FALSE;
+						V_PRINTF(LB"Disable");
+						bADXL345_DisableFIFO( (uint16)(sAppData.sFlash.sData.i16param&0x000F) );
+					}else{
+						bFIFO_Measuring = TRUE;
+						V_PRINTF(LB"Enable");
+						bADXL345_EnableFIFO( (uint16)(sAppData.sFlash.sData.i16param&0x000F) );
+					}
+				}else if( (sObjADXL345.u8Interrupt&0x08) && sAppData.sFlash.sData.u8wait == 0 ){
+					bFIFO_Measuring = FALSE;
+					V_PRINTF(LB"Disable");
+					bADXL345_DisableFIFO( (uint16)(sAppData.sFlash.sData.i16param&0x000F) );
+				}
+				if(bFIFO_Measuring && (sObjADXL345.u8Interrupt&0x02) ){
+					bFirst = FALSE;
+					// ADC の取得
+					vADC_WaitInit();
+					vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
 
-		// RUNNING 状態
-		ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+					// RUNNING 状態
+					ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+				}else{
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+				}
+			}else{
+				bFirst = FALSE;
+				// ADC の取得
+				vADC_WaitInit();
+				vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
+
+				// RUNNING 状態
+				ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+			}
+		}else{
+			bADXL345_StartMeasuring(FALSE);
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+		}
 
 	} else {
 		V_PRINTF(LB "*** unexpected state.");
@@ -120,19 +158,28 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 		}
 
-		if( sAppData.bWakeupByButton ){
+		if( sAppData.bWakeupByButton && (sObjADXL345.u8Interrupt&0x02) ){
+			u8GetCount++;		// 送信回数をインクリメント
+
 			uint8	i;
 			uint8	au8Data[91];
 			uint8*	q = au8Data;
 			S_OCTET(sAppData.sSns.u8Batt);
 			S_BE_WORD(sAppData.sSns.u16Adc1);
 			S_BE_WORD(sAppData.sSns.u16Adc2);
-			S_BE_WORD(sObjADXL345.ai16ResultX[0]);
-			S_BE_WORD(sObjADXL345.ai16ResultY[0]);
-			S_BE_WORD(sObjADXL345.ai16ResultZ[0]);
+			if(sObjADXL345.u8FIFOSample > 10){
+				i = sObjADXL345.u8FIFOSample-10;
+			}else{
+				i = 0;
+			}
+			S_BE_WORD(sObjADXL345.ai16ResultX[i]);
+			S_BE_WORD(sObjADXL345.ai16ResultY[i]);
+			S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
+
 			S_OCTET( 0xFA );
-			S_OCTET( sObjADXL345.u8FIFOSample );
-			for( i=1; i<=sObjADXL345.u8FIFOSample; i++ ){
+			S_OCTET( sObjADXL345.u8FIFOSample-i );
+			i++;
+			for( ; i<sObjADXL345.u8FIFOSample; i++ ){
 				S_BE_WORD(sObjADXL345.ai16ResultX[i]);
 				S_BE_WORD(sObjADXL345.ai16ResultY[i]);
 				S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
@@ -166,8 +213,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
-		V_PRINTF(LB"! Sleeping...");
-		V_FLUSH();
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
@@ -176,9 +221,33 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
 
+
+		uint16 u16Rate = (1000/u16ADXL345_GetSamplingFrequency())*10;
+		uint32 u32Sleep = sAppData.sFlash.sData.u32Slp-(u16Rate*sAppData.sFlash.sData.u8wait);
+		if( sAppData.sFlash.sData.u8wait == 0 || u8GetCount < sAppData.sFlash.sData.u8wait  ){
+			u32Sleep = 0;
+		}else{
+			if( (sAppData.sFlash.sData.i16param&0x000F) == 0 ){
+				bADXL345_EndMeasuring();
+
+				// 起床中にサンプリングしていても良いように読み込んでFIFOの中身をクリアする
+				bADXL345FIFOreadResult( sObjADXL345.ai16ResultX, sObjADXL345.ai16ResultY, sObjADXL345.ai16ResultZ );
+				// ダメ押しでレジスタに残っているデータも読み込む
+				uint8 au8data[6];
+				bool_t bOk;
+				GetAxis(bOk, au8data);
+			}else{
+				bADXL345_DisableFIFO( (uint16)(sAppData.sFlash.sData.i16param&0xFFFF) );
+				u32Sleep = 0;
+			}
+			u8GetCount = 0;
+		}
+
+		V_PRINTF(LB"! Sleeping... : %dms, 0x%02X", u32Sleep, sObjADXL345.u8Interrupt );
+		V_FLUSH();
+
 		u8Read_Interrupt();
-		//vAHI_Sleep(E_AHI_SLEEP_OSCOFF_RAMON);
-		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, u32Sleep, u32Sleep>0 ? TRUE:FALSE, FALSE);
 	}
 }
 
@@ -347,11 +416,17 @@ static void vProcessADXL345_FIFO(teEvent eEvent) {
 	if (bSnsObj_isComplete(&sSnsObj)) {
 		u8sns_cmplt |= E_SNS_ADXL345_CMP;
 
-		V_PRINTF(LB"!ADXL345: X : %d, Y : %d, Z : %d",
-			sObjADXL345.ai16ResultX[0],
-			sObjADXL345.ai16ResultY[0],
-			sObjADXL345.ai16ResultZ[0]
-		);
+		uint8 i;
+		V_PRINTF( LB"!NUM = %d", sObjADXL345.u8FIFOSample );
+
+		for(i=0; i<sObjADXL345.u8FIFOSample; i++ ){
+			V_PRINTF(LB"!ADXL345_%d: X : %d, Y : %d, Z : %d",
+					i,
+					sObjADXL345.ai16ResultX[i],
+					sObjADXL345.ai16ResultY[i],
+					sObjADXL345.ai16ResultZ[i]
+			);
+		}
 
 		// 完了時の処理
 		if (u8sns_cmplt == E_SNS_ALL_CMP) {

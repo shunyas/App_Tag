@@ -63,6 +63,7 @@ extern "C" {
 #define ADXL345_FIFO_CTL		0x38
 #define ADXL345_FIFO_STATUS		0x39
 
+//	センサパラメータの設定値
 #define NORMAL				0
 #define S_TAP				1
 #define D_TAP				2
@@ -80,10 +81,14 @@ extern "C" {
 #define NEKOTTER			256
 #define LOWENERGY			512
 #define FIFO				1024
+#define LINK				2048
+#define DIS_ZAXES			4096
+#define DIS_YAXES			8192
+#define DIS_XAXES			16384
 
 #define READ_FIFO 10
 #define READ_FIFO_SHAKE 5
-#define READ_FIFO_AIR 5
+#define READ_FIFO_AIR 3
 
 #define TH_ACCEL 120
 #define TH_COUNT 0
@@ -109,9 +114,9 @@ typedef struct {
 	// data
 	uint8	u8FIFOSample;
 	int16	ai16Result[3];
-	int16	ai16ResultX[16];
-	int16	ai16ResultY[16];
-	int16	ai16ResultZ[16];
+	int16	ai16ResultX[33];
+	int16	ai16ResultY[33];
+	int16	ai16ResultZ[33];
 	uint8	u8Interrupt;
 
 	// working
@@ -135,6 +140,10 @@ PUBLIC bool_t bADXL345readResult( int16* ai16accel );		// 普通に加速度を�
 PUBLIC bool_t bNekotterreadResult( int16* ai16accel );		// 加速度を読み込んで分散をとったものを返す
 PUBLIC bool_t bShakereadResult( int16* ai16accel );			// 加速度の変化量の合計を返す
 
+uint16 u16ADXL345_GetSamplingFrequency(void);
+bool_t bADXL345_StartMeasuring( bool_t bLink );
+bool_t bADXL345_EndMeasuring(void);
+
 // LowEnergy
 PUBLIC bool_t bADXL345_LowEnergyStartRead();
 void vADXL345_LowEnergy_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
@@ -143,8 +152,10 @@ PUBLIC bool_t bADXL345_LowEnergyReadResult( int16* ai16accel );
 
 // fifo
 void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
-bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency );
+bool_t bADXL345_FIFO_Setting( uint16 u16mode, tsADXL345Param sParam );
 PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int16* ai16accelz );
+bool_t bADXL345_EnableFIFO( uint16 u16mode );
+bool_t bADXL345_DisableFIFO( uint16 u16mode );
 
 // AirVolume
 void vADXL345_AirVolume_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );

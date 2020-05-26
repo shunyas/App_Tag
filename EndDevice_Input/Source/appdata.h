@@ -11,6 +11,7 @@
 #include "ToCoNet.h"
 #include "flash.h"
 #include "sensor_driver.h"
+#include "btnMgr.h"
 
 #include "adc.h"
 
@@ -60,6 +61,11 @@ typedef struct {
 	bool_t bFlashLoaded; //!< フラッシュにデータが合った場合は TRUE
 	uint8 u8LedState; //!< LED状態 (0: 消灯 1: 点灯 2: ブリンク)
 	uint32 u32LedTick; //!< Led Tick から一定期間点灯する
+	uint8 u8SettingsID; //!< 設定の保存先のIDを保持する
+
+	// button manager
+	tsBTM_Config sBTM_Config; //!< ボタン入力（連照により状態確定する）管理構造体
+	PR_BTM_HANDLER pr_BTM_handler; //!< ボタン入力用のイベントハンドラ (TickTimer 起点で呼び出す)
 } tsAppData_Ed;
 
 extern tsAppData_Ed sAppData_Ed;

@@ -44,16 +44,10 @@ extern tsFILE sDebugStream;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent);
-//PRIVATE bool_t bSetFIFO( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
-uint8 ADXL345_AXIS[3] = {
-		ADXL345_X,
-		ADXL345_Y,
-		ADXL345_Z
-};
 
 /****************************************************************************/
 /***        Local Variables                                               ***/
@@ -83,33 +77,34 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	u16modeflag = (uint16)i16mode;
 	u16modeflag = ((i16mode&SHAKE) != 0) ? SHAKE : u16modeflag;
 	u16modeflag = ((i16mode&DICE) != 0) ? DICE : u16modeflag;
+	uint8 u8UseAxis = (uint8)(((~i16mode)&0x7000)>>12);
 
 	uint8 com;
 	if( u16modeflag == NEKOTTER || u16modeflag == SHAKE ){
 		switch(sParam.u16Duration){
-//		case 1:
-//			com = 0x14;		//	Low Power Mode, 1.56Hz Sampling frequency
-//			break;
-//		case 3:
-//			com = 0x15;		//	Low Power Mode, 3.13Hz Sampling frequency
-//			break;
+		case 1:
+			com = 0x14;		//	Low Power Mode, 1.56Hz Sampling frequency
+			break;
+		case 3:
+			com = 0x15;		//	Low Power Mode, 3.13Hz Sampling frequency
+			break;
 		case 6:
-			com = 0x06;		//	Low Power Mode, 6.25Hz Sampling frequency
+			com = 0x06;		//	6.25Hz Sampling frequency
 			break;
 		case 12:
-			com = 0x07;		//	Low Power Mode, 12.5Hz Sampling frequency
+			com = 0x07;		//	12.5Hz Sampling frequency
 			break;
 		case 25:
-			com = 0x18;		//	Low Power Mode, 25Hz Sampling frequency
+			com = 0x18;		//	25Hz Sampling frequency
 			break;
 		case 50:
-			com = 0x09;		//	Low Power Mode, 50Hz Sampling frequency
+			com = 0x09;		//	50Hz Sampling frequency
 			break;
 		case 100:
-			com = 0x0A;		//	Low Power Mode, 100Hz Sampling frequency
+			com = 0x0A;		//	100Hz Sampling frequency
 			break;
 		case 200:
-			com = 0x0B;		//	Low Power Mode, 200Hz Sampling frequency
+			com = 0x0B;		//	200Hz Sampling frequency
 			break;
 		case 400:
 			com = 0x0C;		//	400Hz Sampling frequency
@@ -129,9 +124,9 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 		}
 	}else{
 		if( u16modeflag == NORMAL ){
-			com = 0x19;		//	50Hz Sampling frequency
+			com = 0x19;		//	Low Power Mode, 50Hz Sampling frequency
 		}else{
-			com = 0x09;		//	50Hz Sampling frequency
+			com = 0x1A;		//	Low Power Mode, 100Hz Sampling frequency
 		}
 	}
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
@@ -139,12 +134,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
 
-	if(bLink){
-		com = 0x08;		//	Start Measuring
-	}else{
-		com = 0x28;		//	Link(Active -> Inactive -> Active ...), Start Measuring
-	}
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+	bOk &= bADXL345_StartMeasuring(bLink);
 
 	uint16 u16tempcom;
 	//	タップを判別するための閾値
@@ -217,7 +207,8 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 
 	//	タップを検知する軸の設定
 	if( (u16modeflag&S_TAP) || (u16modeflag&D_TAP) ){
-		com = 0x07;
+//		com = 0x07;
+		com = u8UseAxis;
 	}else{
 		com = 0x00;
 	}
@@ -314,7 +305,8 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 
 	//	動いている/いないことを判断するための軸
 	if( (u16modeflag&ACTIVE) || u16modeflag == DICE ){
-		com = 0x77;
+//		com = 0x77;
+		com = u8UseAxis|(uint8)(u8UseAxis<<4);
 	}else{
 		com = 0x00;
 	}
@@ -406,6 +398,75 @@ PUBLIC bool_t bADXL345reset()
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	com = 0x0A;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
+
+	return bOk;
+}
+
+uint16 u16ADXL345_GetSamplingFrequency(void)
+{
+	uint8 data;
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &data );
+
+	data = data&0x0F;		// rateだけにする
+
+	uint16 u16SR = 0;
+	switch(data){
+		case 0x04:
+			u16SR = 1;
+			break;
+		case 0x05:
+			u16SR = 3;
+			break;
+		case 0x06:
+			u16SR = 6;
+			break;
+		case 0x07:
+			u16SR = 12;
+			break;
+		case 0x08:
+			u16SR = 25;
+			break;
+		case 0x09:
+			u16SR = 50;
+			break;
+		case 0x0A:
+			u16SR = 100;
+			break;
+		case 0x0B:
+			u16SR = 200;
+			break;
+		case 0x0C:
+			u16SR = 400;
+			break;
+		case 0x0D:
+			u16SR = 800;
+			break;
+		case 0x0E:
+			u16SR = 1600;
+			break;
+		case 0x0F:
+			u16SR = 3200;
+			break;
+		default:
+			break;
+	}
+
+	return u16SR;
+}
+
+bool_t bADXL345_StartMeasuring( bool_t bLink )
+{
+	uint8 com = 0x08 | (bLink ? 0x00 : 0x20);		//	Start Measuring
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+
+	return bOk;
+}
+
+bool_t bADXL345_EndMeasuring(void)
+{
+	uint8 com = 0x07;		//	End Measuring
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
 
 	return bOk;
 }

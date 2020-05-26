@@ -409,7 +409,11 @@ static void vProcessInputByte(uint8 u8Byte) {
 		if (u8lastbyte == 'R') {
 			// R S と連続入力された場合は、フラッシュエリアを消去する
 			V_PRINTF("!INF CLEAR SAVE AREA.");
-			bFlash_Erase(FLASH_SECTOR_NUMBER - 1); // SECTOR ERASE
+#ifdef ENDDEVICE_INPUT
+			bFlash_Erase(sAppData.u8SettingsID); // SECTOR ERASE
+#else
+			bFlash_Erase(0xFF); // ALL ERASE
+#endif
 		} else {
 			bool_t bRet = Config_bSave();
 			V_PRINTF("!INF FlashWrite %s"LB, bRet ? "Success" : "Failed");
@@ -673,7 +677,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			if (u32val == 0) {
 
 			} else
-			if (u32val >= 30 && u32val <= 86400000) {
+			if (u32val >= 30 && u32val <= 160000000) {
 				sConfig_UnSaved.u32Slp = u32val;
 				V_PRINTF("%d"LB, u32val);
 			} else {
@@ -937,10 +941,13 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
  * @return
  */
 bool_t Config_bLoad(tsFlash *p) {
-	bool_t bRet = FALSE;
-
 	// フラッシュの読み出し
-	bRet = bFlash_Read(p, FLASH_SECTOR_NUMBER - 1, 0);
+	bool_t bRet = TRUE;
+#ifdef ENDDEVICE_INPUT
+	bRet &= bFlash_Read(p, sAppData.u8SettingsID, 0);
+#else
+	bRet &= bFlash_Read(p, 0, 0);
+#endif
 
 	// Version String のチェック
 	if (bRet && APP_ID == p->sData.u32appkey  && VERSION_U32 == p->sData.u32ver) {
@@ -1105,7 +1112,12 @@ bool_t Config_bSave() {
 	sFlash.sData.u32appkey = APP_ID;
 	sFlash.sData.u32ver = VERSION_U32;
 
-	bool_t bRet = bFlash_Write(&sFlash, FLASH_SECTOR_NUMBER - 1, 0);
+	bool_t bRet = TRUE;
+#ifdef ENDDEVICE_INPUT
+	bRet &= bFlash_Write(&sFlash, sAppData.u8SettingsID, 0);
+#else
+	bRet &= bFlash_Write(&sFlash, 0, 0);
+#endif
 
 	// sAppData へ反映
 	sAppData.sFlash.sData = sFlash.sData;
@@ -1134,6 +1146,7 @@ static void vSerUpdateScreen() {
 
 #ifdef ENDDEVICE_INPUT
 	V_PRINTF( "/RC=%d", sAppData.sFlash.sData.u16RcClock);
+	V_PRINTF( "/ST=%d", sAppData.u8SettingsID );
 #endif
 
 	V_PRINTF(" ---"LB);

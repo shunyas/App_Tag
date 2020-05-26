@@ -691,8 +691,8 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 				default:
 					break;
 				}
-				A_PRINTF(LB);
 			}
+			A_PRINTF(LB);
 		}
 		break;
 	case PKT_ID_BUTTON:
@@ -936,6 +936,11 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16 i16y = G_BE_WORD();
 			int16 i16z = G_BE_WORD();
 			uint8 u8bitmap = G_OCTET();
+
+			uint8 u8ActTapSource = ( u16adc1>>12 )|((u16adc2>>8)&0xF0);
+
+			u16adc1 = u16adc1&0x0FFF;
+			u16adc2 = u16adc2&0x0FFF;
 
 			// センサー情報
 			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=%04d:y=%04d:z=%04d",
@@ -1545,6 +1550,11 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16z = G_BE_WORD();
 		uint8 u8mode = G_OCTET();
 
+		uint8 u8ActTapSource = ( u16adc1>>12 )|((u16adc2>>8)&0xF0);
+
+		u16adc1 = u16adc1&0x0FFF;
+		u16adc2 = u16adc2&0x0FFF;
+
 		if( u8mode == 0xFA ){
 			A_PRINTF( ";%d.%02d;", u32TickCount_ms / 1000, (u32TickCount_ms % 1000)/10 );
 		}else{
@@ -1558,7 +1568,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 			"%07x;"			// シリアル番号
 			"%04d;"			// 電源電圧 (0-3600, mV)
 			"%04x;"			// モード
-			"%04d;"			//
+			"%04X;"			//
 			"%04d;"			// adc1
 			"%04d;"			// adc2
 			"%0c;"			// パケット識別子
@@ -1572,7 +1582,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 			sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
 			DECODE_VOLT(u8batt),
 			u8mode,
-			0,
+			u8ActTapSource,
 			u16adc1,
 			u16adc2,
 			'X',
@@ -2062,6 +2072,11 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16	i16x = G_BE_WORD();
 			int16	i16y = G_BE_WORD();
 			int16	i16z = G_BE_WORD();
+
+			uint8 u8ActTapSource = ( u16adc0>>12 )|((u16adc1>>8)&0xF0);(void)u8ActTapSource;
+
+			u16adc0 = u16adc0&0x0FFF;
+			u16adc1 = u16adc1&0x0FFF;
 
 			S_OCTET(u8batt); // batt
 			S_BE_WORD(u16adc0);

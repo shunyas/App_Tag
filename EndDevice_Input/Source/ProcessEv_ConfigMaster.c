@@ -156,30 +156,31 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		// *   OCTET(4) : アプリケーションバージョン
 		uint32 u32ver = G_BE_DWORD();
 
-
-		// プロトコルバージョンの判定
-		if (u8pktver != RMTCNF_PRTCL_VERSION) {
-			V_PRINTF(LB"!PRTCL_VERSION");
-			V_PRINTF(" : %08X PKTVER %d", pRx->u32SrcAddr, u8pktver );
-//			return;
-		}
-
-		// ファームウェアのバージョンの判定
-		if (u32ver != VERSION_U32) {
-			V_PRINTF(LB"!VERSION_U32");
-			V_PRINTF(" : %08X VER %d.%d.%d", pRx->u32SrcAddr, (u32ver>>16)&0xFF, (u32ver>>8)&0xFF, u32ver&0xFF );
-//			return;
-		}
-
-		// 子機のファームウェアが v2.x未満でパケットバージョンが異なる場合、設定を送り返さない
-		if( (u32ver&0x00FFFFFF) < 0x00020000 && u8pktver != RMTCNF_PRTCL_VERSION ){
-			V_PRINTF(LB"FAILURE %08X"LB, pRx->u32SrcAddr);
-			return;
-		}
-
 		// *   パケット種別 = 応答
 		// 受信パケットに応じて処理を変える
-		if (u8pkttyp == RMTCNF_PKTTYPE_REQUEST) {
+		if( u8pkttyp == RMTCNF_PKTTYPE_REQUEST ){
+			V_PRINTF(LB"!INF REQUEST CONF FROM %08X FW_VER:%d.%d.%d", pRx->u32SrcAddr, (u32ver>>16)&0xFF, (u32ver>>8)&0xFF, u32ver&0xFF );
+
+			// プロトコルバージョンの判定
+			if (u8pktver != RMTCNF_PRTCL_VERSION) {
+				V_PRINTF(LB"!PRTCL_VERSION");
+				V_PRINTF(" : PKTVER %d", u8pktver );
+//				return;
+			}
+
+			// ファームウェアのバージョンの判定
+			if (u32ver != VERSION_U32) {
+				V_PRINTF(LB"!VERSION_U32");
+				V_PRINTF(" : VER %d.%d.%d", (u32ver>>16)&0xFF, (u32ver>>8)&0xFF, u32ver&0xFF );
+//				return;
+			}
+
+			// 子機のファームウェアが v2.x未満でパケットバージョンが異なる場合、設定を送り返さない
+			if( (u32ver&0x00FFFFFF) < 0x00020000 && u8pktver != RMTCNF_PRTCL_VERSION ){
+				V_PRINTF(LB"FAILURE %08X"LB, pRx->u32SrcAddr);
+				return;
+			}
+
 			// *   OCTET    : 設定有効化 LQI
 			if (pRx->u8Lqi < RMTCNF_MINLQI ) {
 				V_PRINTF(LB"!LQI");
@@ -187,7 +188,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 				return;
 			}
 
-			V_PRINTF(LB"!INF REQUEST CONF FR %08X", pRx->u32SrcAddr);
+
 			bTranmitRespond(pRx->u32SrcAddr);
 
 			// LED1 点灯
@@ -195,7 +196,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 			sAppData.u8LedState = 0x01;
 		} else
 		if (u8pkttyp == RMTCNF_PKTTYPE_ACK) {
-			V_PRINTF(LB"!INF ACK CONF FR %08X", pRx->u32SrcAddr);
+			V_PRINTF(LB"!INF ACK CONF FROM %08X", pRx->u32SrcAddr);
 
 			uint8 u8stat = G_OCTET();
 			if (u8stat) {

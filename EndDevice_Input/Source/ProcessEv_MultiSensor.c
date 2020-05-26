@@ -96,10 +96,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 						break;
 					case PKT_ID_ADXL345:
 						vADXL345_Init( (tsObjData_ADXL345*)(asSnsObjAll[i].tsObjData), &(asSnsObjAll[i].sSnsObj) );
-						//vADXL345_LowEnergy_Init( (tsObjData_ADXL345*)(asSnsObjAll[i].tsObjData), &(asSnsObjAll[i].sSnsObj) );
 						if( bFirst ){
 							bADXL345reset();
-							//bADXL345_LowEnergy_Setting();
 							bADXL345_Setting( 0, sAppData.sFlash.sData.uParam.sADXL345Param, FALSE );
 						}
 						break;
@@ -107,7 +105,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 						vTSL2561_Init( (tsObjData_TSL2561*)asSnsObjAll[i].tsObjData, &(asSnsObjAll[i].sSnsObj) );
 						break;
 					case PKT_ID_L3GD20:
-						vL3GD20_Init( &sObjL3GD20, &(asSnsObjAll[i].sSnsObj), 0 );
+						vL3GD20_Init( &sObjL3GD20, &(asSnsObjAll[i].sSnsObj), 2 );
 						break;
 					case PKT_ID_S1105902:
 						vS1105902_Init( (tsObjData_S1105902*)asSnsObjAll[i].tsObjData, &(asSnsObjAll[i].sSnsObj) );

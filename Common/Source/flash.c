@@ -34,7 +34,7 @@ bool_t bFlash_Read(tsFlash *psFlash, uint8 sector, uint32 offset) {
 
 
 #ifdef USE_EEPROM
-    if (EEP_6x_bRead(0, sizeof(tsFlash), (uint8 *)psFlash)) {
+    if (EEP_6x_bRead(offset, sizeof(tsFlash), (uint8 *)psFlash)) {
     	bRet = TRUE;
     }
 #else
@@ -71,7 +71,7 @@ bool_t bFlash_Write(tsFlash *psFlash, uint8 sector, uint32 offset)
 #ifdef USE_EEPROM
 	psFlash->u32Magic = FLASH_MAGIC_NUMBER;
 	psFlash->u8CRC = u8CCITT8((uint8*)&(psFlash->sData), sizeof(tsFlashApp));
-	if (EEP_6x_bWrite(0, sizeof(tsFlash), (uint8 *)psFlash)) {
+	if (EEP_6x_bWrite(offset, sizeof(tsFlash), (uint8 *)psFlash)) {
 		bRet = TRUE;
 	}
 #else
@@ -99,14 +99,19 @@ bool_t bFlash_Erase(uint8 sector)
 
 #ifdef USE_EEPROM
 	int i;
-    // EEPROM の全領域をクリアする。セグメント単位で消去する
-    uint8 au8buff[EEPROM_6X_SEGMENT_SIZE];
-    memset (au8buff, 0xFF, EEPROM_6X_SEGMENT_SIZE);
+	// EEPROM の全領域をクリアする。セグメント単位で消去する
+	uint8 au8buff[FLASH_SECTOR_SIZE];
+	memset (au8buff, 0xFF, FLASH_SECTOR_SIZE);
 
-    bRet = TRUE;
-    for (i = 0; i < EEPROM_6X_USER_SEGMENTS; i++) {
-		bRet &= EEP_6x_bWrite(i * EEPROM_6X_SEGMENT_SIZE, EEPROM_6X_SEGMENT_SIZE, au8buff);
-    }
+	bRet = TRUE;
+
+	if(sector == 0xFF){
+		for (i = 0; i < EEPROM_6X_USER_SEGMENTS; i++) {
+			bRet &= EEP_6x_bWrite(i * EEPROM_6X_SEGMENT_SIZE, EEPROM_6X_SEGMENT_SIZE, au8buff);
+		}
+	}else{
+		bRet &= EEP_6x_bWrite(sector * FLASH_SECTOR_SIZE, FLASH_SECTOR_SIZE, au8buff);
+	}
 #else
     if (bAHI_FlashInit(FLASH_TYPE, NULL) == TRUE) {
         if (bAHI_FlashEraseSector(sector) == TRUE) { // erase a corresponding sector.

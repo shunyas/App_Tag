@@ -16,6 +16,8 @@
 #include "sensor_driver.h"
 #include "ADXL345.h"
 
+#define AVE_NUM 5		// 平均する回数 1～5で設定すること
+
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
 static void vProcessADXL345_AirVolume(teEvent eEvent);
@@ -305,9 +307,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		}
 
 		//	センサから読み込んだ加速度を代入
-		x[0] = sObjADXL345.ai16Result[ADXL345_IDX_X];
-		y[0] = sObjADXL345.ai16Result[ADXL345_IDX_Y];
-		z[0] = sObjADXL345.ai16Result[ADXL345_IDX_Z];
+		x[AVE_NUM-1] = sObjADXL345.ai16Result[ADXL345_IDX_X];
+		y[AVE_NUM-1] = sObjADXL345.ai16Result[ADXL345_IDX_Y];
+		z[AVE_NUM-1] = sObjADXL345.ai16Result[ADXL345_IDX_Z];
 
 		int16 avex=0;
 		int16 avey=0;
@@ -315,21 +317,17 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 
 		//	5回分の平均を取る
 		uint8 i;
-		for( i=0; i<5; i++){
+		for( i=0; i<AVE_NUM; i++){
 			avex += x[i];
 			avey += y[i];
 			avez += z[i];
+			x[i] = x[i+1];
+			y[i] = y[i+1];
+			z[i] = z[i+1];
 		}
-		avex /= 5;
-		avey /= 5;
-		avez /= 5;
-
-		//	1回分シフト
-		for( i=4; i>0; i--){
-			x[i] = x[i-1];
-			y[i] = y[i-1];
-			z[i] = z[i-1];
-		}
+		avex /= AVE_NUM;
+		avey /= AVE_NUM;
+		avez /= AVE_NUM;
 
 		//	送信先の制御を行うか否かの判定
 		if( ABS(avez) < 400 ){			// 現在のZ軸にかかっている加速度が0.4g以下になった回数が(実質)連続でENABLE_COUNTER回続いたら計測開始

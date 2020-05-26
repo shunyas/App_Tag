@@ -43,7 +43,7 @@
 #define IS_APPCONF_OPT_APP_TWELITE() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_APP_TWELITE) != 0) //!< E_APPCONF_OPT_DOOR_TIMER 判定
 
 /**
- * 親機のUART出力を SimpleTag v3 互換のセミコロン区切りにする
+ * 親機のUART出力をセミコロン区切りにする
  */
 #define E_APPCONF_OPT_SmplTag 0x00000020UL
 #define IS_APPCONF_OPT_SmplTag() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_SmplTag) != 0) //!< E_APPCONF_OPT_SHT21 判定
@@ -53,6 +53,12 @@
  */
 #define E_APPCONF_OPT_WAKE_RANDOM 0x00000040UL
 #define IS_APPCONF_OPT_WAKE_RANDOM() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_WAKE_RANDOM) != 0) //!< E_APPCONF_OPT_WAKE_RANDOM 判定
+
+/**
+ * EndDeviceでWDT出力を行う
+ */
+#define E_APPCONF_OPT_ENABLE_WDT 0x00000080UL
+#define IS_APPCONF_OPT_ENABLE_WDT() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_ENABLE_WDT) != 0) //!< E_APPCONF_OPT_ENABLE_WDT 判定
 
 /**
  * UARTアプリを有効にする

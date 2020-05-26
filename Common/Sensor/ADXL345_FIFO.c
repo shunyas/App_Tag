@@ -62,12 +62,14 @@ void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 
 	memset((void*)pData, 0, sizeof(tsObjData_ADXL345));
 }
+
 //	センサの設定を記述する関数
-bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency )
+bool_t bADXL345_FIFO_Setting( uint16 u16mode, tsADXL345Param sParam )
 {
 	uint8 com;
+	uint8 u8UseAxis = (uint8)(((~u16mode)&0x7000)>>12);
 
-	switch( u16SamplingFreqency ){
+	switch( sParam.u16Duration ){
 	case 1:
 		com = 0x04;		//	1.56Hz Sampling frequency
 		break;
@@ -107,18 +109,121 @@ bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency )
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
 
-	com = 0x00;
+	com = 0x02;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_MAP, 1, &com );
 
-	//	有効にする割り込みの設定
-	com = 0x02;
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
+	bOk &= bADXL345_StartMeasuring(FALSE);
 
-	com = 0xC0 | 0x20 | READ_FIFO;
+	//	タップを判別するための閾値
+	if( (u16mode&S_TAP) || (u16mode&D_TAP) ){
+		com = 0x32;			//	threshold of tap
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_TAP, 1, &com );
+
+		//	タップを認識するための時間
+		com = 0x0F;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DUR, 1, &com );
+
+		//	タップを検知する軸の設定
+		com = u8UseAxis;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TAP_AXES, 1, &com );
+	}
+
+	//	次のタップまでの時間
+	if( u16mode&D_TAP ){
+		com = 0x50;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_LATENT, 1, &com );
+
+		//	ダブルタップを認識するための時間
+		com = 0xD9;			// Window Width
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_WINDOW, 1, &com );
+	}
+
+	//	自由落下を検知するための閾値
+	if( u16mode&FREEFALL ){
+		com = 0x07;			// threshold of freefall
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_FF, 1, &com );
+
+		//	自由落下を検知するための時間
+		com = 0x2D;			// time of freefall
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_FF, 1, &com );
+	}
+
+	//	動いていることを判断するための閾値
+	if( u16mode&ACTIVE ){
+		com = 0x15;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );
+
+		//	動いていないことを判断するための閾値
+		com = 0x14;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_INACT, 1, &com );
+
+		//	動いていないことを判断するための時間(s)
+		com = 0x02;
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_INACT, 1, &com );
+
+		//	動いている/いないことを判断するための軸
+		com = u8UseAxis|(uint8)(u8UseAxis<<4);
+		bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 1, &com );
+	}
+
+	if( (u16mode&0x000F) == 0 ){
+		bOk &= bADXL345_EnableFIFO( 0 );
+	}else{
+		bOk &= bADXL345_DisableFIFO( (uint16)(u16mode&0x000F) );
+	}
+
+//	com = 0xC0 | 0x20 | READ_FIFO;
+	com = 0x80 | 0x00 | READ_FIFO;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 
-	com = 0x08;		//	Start Measuring
-	bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+	return bOk;
+}
+
+bool_t bADXL345_EnableFIFO( uint16 u16mode )
+{
+	//	有効にする割り込みの設定
+	uint8 com = 0x02;
+	if( u16mode&S_TAP ){
+		com += 0x40;
+	}
+	if( u16mode&D_TAP ){
+		com += 0x20;
+	}
+	if( u16mode&FREEFALL ){
+		com += 0x04;
+	}
+	if( u16mode&ACTIVE ){
+		com += 0x18;
+	}
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
+
+//	com = 0xC0 | 0x20 | READ_FIFO;
+//	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+
+	return bOk;
+}
+
+bool_t bADXL345_DisableFIFO( uint16 u16mode )
+{
+	// FIFOを止める
+//	uint8 com = 0x00 | 0x20 | READ_FIFO;
+//	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+
+	//	有効にする割り込みの設定
+	uint8 com = 0;
+	if( u16mode&S_TAP ){
+		com += 0x40;
+	}
+	if( u16mode&D_TAP ){
+		com += 0x20;
+	}
+	if( u16mode&FREEFALL ){
+		com += 0x04;
+	}
+	if( u16mode&ACTIVE ){
+		com += 0x18;
+	}
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
 
 	return bOk;
 }
@@ -152,9 +257,7 @@ PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int1
 
 	//	FIFOの中身を全部読む
 	u8num = (u8num&0x7f);
-	if( u8num > 14 ){
-		u8num = 14;
-	}
+
 	//	各軸の読み込み
 	for( i=0; i<u8num; i++ ){
 		//	加速度を読み込む
@@ -162,16 +265,8 @@ PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int1
 		ai16accelx[i] = ((au8data[1] << 8) | au8data[0])<<2;
 		ai16accely[i] = ((au8data[3] << 8) | au8data[2])<<2;
 		ai16accelz[i] = ((au8data[5] << 8) | au8data[4])<<2;
-#if 0
-		vfPrintf( &sSerStream, "\n\r%2d:%d,%d,%d", i, ai16accelx[i], ai16accely[i], ai16accelz[i] );
-		SERIAL_vFlush(E_AHI_UART_0);
 	}
-	vfPrintf( &sSerStream, "\n\r%2d", num );
-	SERIAL_vFlush(E_AHI_UART_0);
-	vfPrintf( &sSerStream, "\n\r" );
-#else
-	}
-#endif
+
 
 	//	終わり
 

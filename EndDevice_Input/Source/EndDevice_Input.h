@@ -24,8 +24,6 @@ extern "C" {
 //#define ToCoNet_USE_MOD_RAND_MT
 //#define ToCoNet_USE_MOD_RAND_XOR_SHIFT
 
-
-
 // includes
 #include "ToCoNet.h"
 #include "ToCoNet_mod_prototype.h"

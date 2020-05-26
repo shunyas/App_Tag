@@ -166,7 +166,9 @@ bool_t bTransmitToAppTwelite( uint8 *pu8Data, uint8 u8Len )
 		return FALSE;
 	}
 
-	LED_ON(LED);
+	if( !(sAppData.sFlash.sData.u8mode == 0x35 && (sAppData.sFlash.sData.i16param&128)) ){
+		LED_ON(LED);
+	}
 	// センサー用の電源制御回路を Hi に戻す
 	vPortSetSns(FALSE);
 

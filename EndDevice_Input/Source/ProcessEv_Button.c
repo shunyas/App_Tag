@@ -12,6 +12,12 @@
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
 
+#define END_INPUT 0
+#define END_ADC 1
+#define END_TX 2
+
+uint8 DI_Bitmap = 0;
+
 /*
  * 最初に遷移してくる状態
  */
@@ -21,6 +27,11 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// 起床メッセージ
 		vSerInitMessage();
 
+		if( sAppData.sFlash.sData.i16param&0x100 ){
+			// WDTにパルスを送る
+			vPortSetHi(3);
+		}
+
 		//	初回起動(リセット)かスリープからの復帰かで表示するメッセージを変える
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -29,8 +40,13 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			// RESUME
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 
-			// RUNNING状態へ遷移
-			ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+			if(sAppData.bWakeupByButton){
+				// 入力待ち状態へ遷移
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_INPUT);
+			}else{
+				vPortSetSns(FALSE);
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+			}
 		} else {
 			// 開始する
 			// start up message
@@ -47,13 +63,48 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			}
 
 			// 最初にパケットを送りたくないのでチャタリング対策状態へ遷移後、割り込みがあるまでスリープ
-			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){		//	スリープしない場合
-				ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+			if( sAppData.sFlash.sData.i16param&0x04 ){		//	スリープしない場合
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_INPUT);
 			}else{
+				vPortSetSns(FALSE);
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP);
 			}
 		}
 
+	}
+}
+
+PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_INPUT, tsEvent *pEv, teEvent eEvent, uint32 u32evarg){
+	bool_t bBtnSet = FALSE;
+	if( sAppData.sFlash.sData.i16param&0x200 ){
+		//V_PRINTF(LB"! TIMER");
+		if ( eEvent == E_ORDER_KICK && u32evarg == END_INPUT ) { // キックされたのでDIの状態が確定した
+			V_PRINTF(LB"! TIMER: %d, %d", ToCoNet_Event_u32TickFrNewState(pEv), u32evarg);
+
+			if( (((sAppData.sFlash.sData.i16param&0x00FF) == 0x00) && DI_Bitmap == 0x01 ) ||	// Hi -> Lo
+				(((sAppData.sFlash.sData.i16param&0x00FF) == 0x01) && DI_Bitmap == 0x00 ) ||	// Lo -> Hi
+				(sAppData.sFlash.sData.i16param&0x00FF == 0x02) ||							// 両方のエッジ
+				(sAppData.sFlash.sData.i16param&0x00FF == 0x04)){							// SWING
+				bBtnSet = TRUE;
+			}
+		}
+	}else{
+		DI_Bitmap = bPortRead(DIO_BUTTON) ? 0x01 : 0x00;
+		bBtnSet = TRUE;
+	}
+
+	if( bBtnSet ){
+		if( sAppData.sFlash.sData.i16param&0x4 ){
+			vPortDisablePullup(DIO_BUTTON);
+		}
+		ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+	}
+
+	// タイムアウトの場合はノイズだと思ってスリープする
+	if (ToCoNet_Event_u32TickFrNewState(pEv) > 100) {
+		V_PRINTF(LB"! TIME OUT (E_STATE_APP_WAIT_INPUT)");
+		V_FLUSH();
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 	}
 }
 
@@ -64,12 +115,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		vADC_WaitInit();
 		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
 	}
-	if (eEvent == E_ORDER_KICK) {
-		uint8 DI_Bitmap = bPortRead(DIO_BUTTON) ? 0x01 : 0x00;
-		if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
-			vPortDisablePullup(DIO_BUTTON);
-		}
-
+	if (eEvent == E_ORDER_KICK && u32evarg == END_ADC ) {
 		uint8*	q;
 		bool_t bOk = FALSE;
 		if( IS_APPCONF_OPT_APP_TWELITE() ){		//超簡単!TWEアプリあてに送信する場合
@@ -119,14 +165,14 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		if ( bOk ) {
 			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 			V_PRINTF(LB"TxOk");
-			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+			if( sAppData.sFlash.sData.i16param&0x4 ){
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
 			}else{
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
 			}
 		} else {
 			V_PRINTF(LB"TxFl");
-			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+			if( sAppData.sFlash.sData.i16param&0x4 ){
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
 			}else{
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
@@ -139,8 +185,8 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 /*	送信完了状態	*/
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
-	if (eEvent == E_ORDER_KICK) { // 送信完了イベントが来たのでスリープする
-		if((sAppData.sFlash.sData.i16param&0x02) != 0){
+	if (eEvent == E_ORDER_KICK  && u32evarg == END_TX ) { // 送信完了イベントが来たのでスリープする
+		if( sAppData.sFlash.sData.i16param&0x02 ){
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // チャタリング無視
 		}else{
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP); // スリープ状態へ遷移
@@ -152,25 +198,28 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
  * 送信後のチャタリング対策を行う状態
  */
 PRSEV_HANDLER_DEF(E_STATE_APP_CHAT_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	/*	遷移してきたとき一旦眠る	*/
+	if(eEvent == E_EVENT_NEW_STATE){
+		V_PRINTF(LB"Safe Chattering...");
+		V_FLUSH();
+		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
+		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
-		/*	遷移してきたとき一旦眠る	*/
-		if(eEvent == E_EVENT_NEW_STATE){
-			V_PRINTF(LB"Safe Chattering...");
-			V_FLUSH();
-			// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		//	割り込み禁止でスリープ
+		pEv->bKeepStateOnSetAll = TRUE;		//	この状態から起床
+		vAHI_DioWakeEnable(0, PORT_INPUT_MASK|PORT_INPUT_SUBMASK); // DISABLE DIO WAKE SOURCE
 
-			//	割り込み禁止でスリープ
-			pEv->bKeepStateOnSetAll = TRUE;		//	この状態から起床
-			vAHI_DioWakeEnable(0, PORT_INPUT_MASK|PORT_INPUT_SUBMASK); // DISABLE DIO WAKE SOURCE
-
-			ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 200UL, FALSE, FALSE);
-
-		/*	起床後すぐこの状態になったときずっと眠る状態へ	*/
-		}else if(eEvent == E_EVENT_START_UP){
-			pEv->bKeepStateOnSetAll = FALSE;
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+		if( sAppData.sFlash.sData.i16param&0x100 ){
+			// WDTにパルスを送る
+			vPortSetLo(3);
 		}
+
+		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 200UL, FALSE, FALSE);
+	/*	起床後すぐこの状態になったときずっと眠る状態へ	*/
+	}else if(eEvent == E_EVENT_START_UP){
+		pEv->bKeepStateOnSetAll = FALSE;
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+	}
 }
 
 /*	スリープをする状態	*/
@@ -182,7 +231,10 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+	}
 
+	// タイムアウト
+	if (ToCoNet_Event_u32TickFrNewState(pEv) > 20 || (sAppData.sFlash.sData.i16param&0x100) == 0 ) {
 		// print message.
 		vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
 
@@ -203,9 +255,16 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 			vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
 		}
 
-		// wake up using wakeup timer as well.
-		ToCoNet_vSleep(E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE ); // PERIODIC RAM OFF SLEEP USING WK0
+		uint32 u32Sleep = 0;
 
+		if( sAppData.sFlash.sData.i16param&0x100 ){
+			// WDTにパルスを送る
+			vPortSetLo(3);
+			u32Sleep = sAppData.sFlash.sData.u32Slp;
+		}
+
+		// wake up using wakeup timer as well.
+		ToCoNet_vSleep(E_AHI_WAKE_TIMER_0, u32Sleep, TRUE, FALSE ); // PERIODIC RAM OFF SLEEP USING WK0
 	}
 }
 
@@ -225,6 +284,7 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
 	PRSEV_HANDLER_TBL_DEF(E_STATE_IDLE),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_RUNNING),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_TX),
+	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_INPUT),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_SLEEP),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_CHAT_SLEEP),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_POWEROFF),
@@ -241,7 +301,6 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	ToCoNet_Event_StateExec(asStateFuncTbl, pEv, eEvent, u32evarg);
 }
 
-#if 0
 /**
  * ハードウェア割り込み
  * @param u32DeviceId
@@ -262,6 +321,15 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		break;
 
 	case E_AHI_DEVICE_TICK_TIMER:
+		if( sAppData.sFlash.sData.i16param&0x200 ){
+			// ボタンハンドラの駆動
+			if (sAppData.pr_BTM_handler) {
+				// ハンドラを稼働させる
+				(*sAppData.pr_BTM_handler)(1000/sToCoNet_AppContext.u16TickHz);
+			}
+		}
+		break;
+
 		break;
 
 	default:
@@ -270,7 +338,6 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 
 	return u8handled;
 }
-#endif
 
 /**
  * ハードウェアイベント（遅延実行）
@@ -280,6 +347,15 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
+		// ボタンの判定を行う。
+		if( sAppData.sFlash.sData.i16param&0x200 ){
+			uint32 bmPorts, bmChanged;
+			if (bBTM_GetState(&bmPorts, &bmChanged)) {
+				//vBTM_Disable();
+				DI_Bitmap = (bmPorts&PORT_INPUT_MASK) ? 0x01 : 0x00;
+				ToCoNet_Event_Process(E_ORDER_KICK, END_INPUT, vProcessEvCore);
+			}
+		}
 		break;
 
 	case E_AHI_DEVICE_ANALOGUE:
@@ -291,7 +367,7 @@ static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		if (bSnsObj_isComplete(&sAppData.sADC)) {
 			// 全チャネルの処理が終わったら、次の処理を呼び起こす
 			vStoreSensorValue();
-			ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
+			ToCoNet_Event_Process(E_ORDER_KICK, END_ADC, vProcessEvCore);
 		}
 		break;
 
@@ -351,14 +427,14 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
  */
 static void cbAppToCoNet_vTxEvent(uint8 u8CbId, uint8 bStatus) {
 	// 送信完了
-	ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
+	ToCoNet_Event_Process(E_ORDER_KICK, END_TX, vProcessEvCore);
 }
 /**
  * アプリケーションハンドラー定義
  *
  */
 static tsCbHandler sCbHandler = {
-	NULL, // cbAppToCoNet_u8HwInt,
+	cbAppToCoNet_u8HwInt,
 	cbAppToCoNet_vHwEvent,
 	NULL, // cbAppToCoNet_vMain,
 	NULL, // cbAppToCoNet_vNwkEvent,
@@ -378,18 +454,6 @@ void vInitAppButton() {
  * センサー値を格納する
  */
 static void vStoreSensorValue() {
-#ifndef SWING
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_0, &sAppData.sSns.u16PC1); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_0); // 16bitの場合
-
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_1, &sAppData.sSns.u16PC2); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
-#endif
-
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
 	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];

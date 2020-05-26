@@ -139,110 +139,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 				FALSE,
 				FALSE);
 
-		// リセットICの無効化(イの一番に処理)
-		vPortSetLo(DIO_VOLTAGE_CHECKER);
-		vPortAsOutput(DIO_VOLTAGE_CHECKER);
-		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
-
-#if defined(OTA) // MONOSTICK を想定する
-		vPortAsOutput(PORT_OUT1);
-		vAHI_DoSetDataOut(2, 0);
-		bAHI_DoEnableOutputs(TRUE); // MISO を出力用に
-#endif
-
-		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
-		vPortSetHi(DIO_SUPERCAP_CONTROL);
-		vPortAsOutput(DIO_SUPERCAP_CONTROL);
-		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
-
-		//	送信ステータスなどのLEDのための出力
-		LED_OFF(LED);
-		vPortAsOutput(LED);
-		vPortDisablePullup(LED);
-
-		// アプリケーション保持構造体の初期化
-		memset(&sAppData, 0x00, sizeof(sAppData));
-
-		// SPRINTFの初期化(128バイトのバッファを確保する)
-		SPRINTF_vInit128();
-
-		// フラッシュメモリからの読み出し
-		//   フラッシュからの読み込みが失敗した場合、ID=15 で設定する
-		sAppData.bFlashLoaded = Config_bLoad(&sAppData.sFlash);
-
-		// M2がLoなら、設定モードとして動作する
-#ifdef OTA
-		sAppData.bConfigMode = TRUE;
-#else
-
-#ifdef SWING
-		u8ConfPort = 16;		// SWINGのSETピンはSCLの副ポート
-#endif
-
-		vPortAsInput(u8ConfPort);
-		bool_t bSetPort = bPortRead(u8ConfPort);
-		if( u8PowerUp == 0x00 && (IS_APPCONF_OPT_PASS_SETTINGS() == FALSE || bSetPort ) ){
-			sAppData.bConfigMode = TRUE;
-
-		}
-#ifdef SWING
-		vPortDisablePullup(u8ConfPort);
-		u8ConfPort = 17;		// SDA
-		vPortAsInput(u8ConfPort);
-		if( bPortRead(u8ConfPort) &&
-			sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON &&
-			!sAppData.bConfigMode ){
-			sAppData.sFlash.sData.u8mode = PKT_ID_LM61;
-		}
-		vPortDisablePullup(u8ConfPort);
-#endif
-
-#endif
-
-		// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
-#ifdef SWING
-		// I2Cセンサを使用するときとそれ以外の時で使用するポートを変える。
-		if( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50 ){
-			DIO_SNS_POWER = 1;
-		}else{
-			DIO_SNS_POWER = 16;
-		}
-#else
-		DIO_SNS_POWER = PORT_OUT3;
-#endif
-
-		// SWINGのインタラクティブモードの場合はセンサ用のDIO制御は有効にしない
-		if(u8ConfPort == PORT_CONF2 || sAppData.bConfigMode == FALSE ){
-			vPortSetSns(TRUE);
-			vPortAsOutput(DIO_SNS_POWER);
-			vPortDisablePullup(DIO_SNS_POWER);
-		}
-
-#ifdef SWING
-		// DIO1がLoもしくはI2CセンサモードだったらApp_Tagモードに変更
-		vPortAsInput(1);
-		if( (bPortRead(1) &&
-			IS_APPCONF_OPT_APP_TWELITE() &&
-			!sAppData.bConfigMode) ||
-			( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) ){
-			sAppData.sFlash.sData.u32Opt -= 0x10;
-		}
-		vPortDisablePullup(1);
-#endif
-
-		// configure network
-		if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
-			sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
-			sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
-		}else{
-			if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID ){
-				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
-			}else{
-				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
-			}
-			sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
-		}
-
 		sToCoNet_AppContext.bRxOnIdle = FALSE;		// 受信回路は開かない
 
 		sToCoNet_AppContext.u8CCA_Level = 1;
@@ -250,11 +146,53 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		sToCoNet_AppContext.u16TickHz = 1000;
 
+		// アプリケーション保持構造体の初期化
+		memset(&sAppData, 0x00, sizeof(sAppData));
+
+		// SPRINTFの初期化(128バイトのバッファを確保する)
+		SPRINTF_vInit128();
+
+#if !defined(OTA) || !defined(SWING)
+		// 設定をロードするセクタの選択
+		vPortAsInput(SETTING_BIT1);
+		vPortAsInput(SETTING_BIT2);
+		vPortAsInput(SETTING_BIT3);
+		vPortAsInput(SETTING_BIT4);
+
+		if(bPortRead(SETTING_BIT1)){
+			sAppData.u8SettingsID += 0x01;
+			vPortDisablePullup(SETTING_BIT1);
+		}
+
+		if(bPortRead(SETTING_BIT2)){
+			sAppData.u8SettingsID += 0x02;
+			vPortDisablePullup(SETTING_BIT2);
+		}
+
+		if(bPortRead(SETTING_BIT3)){
+			sAppData.u8SettingsID += 0x04;
+			vPortDisablePullup(SETTING_BIT3);
+		}
+
+		if(bPortRead(SETTING_BIT4)){
+			sAppData.u8SettingsID += 0x08;
+			vPortDisablePullup(SETTING_BIT4);
+		}
+
+#endif
+
+		// フラッシュメモリからの読み出し
+		//   フラッシュからの読み込みが失敗した場合、ID=15 で設定する
+		sAppData.bFlashLoaded = Config_bLoad(&sAppData.sFlash);
+
 		sAppData.u8Retry = ((sAppData.sFlash.sData.u8pow>>4)&0x0F) + 0x80;		// 強制再送
 		sToCoNet_AppContext.u8TxPower = sAppData.sFlash.sData.u8pow&0x0F;
 
 		// version info
 		sAppData.u32ToCoNetVersion = ToCoNet_u32GetVersion();
+
+		// Other Hardware
+		vInitHardware(FALSE);
 
 		if (sAppData.bConfigMode) {
 			// 設定モードで起動
@@ -263,9 +201,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			sToCoNet_AppContext.u32AppId = APP_ID_OTA;
 			sToCoNet_AppContext.u8Channel = CHANNEL_OTA;
 			sToCoNet_AppContext.bRxOnIdle = TRUE;
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 #ifdef OTA
@@ -287,20 +222,14 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// ADC の初期化
 			vInitADC();
 
-			// Other Hardware
-			vInitHardware(FALSE);
-
 			// イベント処理の初期化
 			vInitAppSHT21();
 		} else
 		//	ボタン起動モード
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ) {
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
-			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを省略する(保存した値を確認)
 			sToCoNet_AppContext.u8CPUClk = 3;
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// ADC の初期化
 			vInitADC();
@@ -310,9 +239,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		} else
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
 			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// UART 処理
 			vInitAppUart();
@@ -327,9 +253,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 
-			// Other Hardware
-			vInitHardware(FALSE);
-
 			// イベント処理の初期化
 			vInitAppDoorTimer();
 		} else
@@ -340,9 +263,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// ADC の初期化
 			vInitADC();
 
-			// Other Hardware
-			vInitHardware(FALSE);
-
 			// イベント処理の初期化
 			vInitAppBME280();
 		} else
@@ -352,9 +272,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 			// ADC の初期化
 			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 			vInitAppS1105902();
@@ -367,9 +284,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// ADC の初期化
 			vInitADC();
 
-			// Other Hardware
-			vInitHardware(FALSE);
-
 			// イベント処理の初期化
 			vInitAppADT7410();
 		} else
@@ -380,9 +294,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// ADC の初期化
 			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 			vInitAppMPL115A2();
@@ -395,9 +306,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// ADC の初期化
 			vInitADC();
 
-			// Other Hardware
-			vInitHardware(FALSE);
-
 			// イベント処理の初期化
 			vInitAppLIS3DH();
 		} else
@@ -407,8 +315,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 			// ADC の初期化
 			vInitADC();
-			// Other Hardware
-			vInitHardware(FALSE);
+
 			// イベント処理の初期化
 			vInitAppL3GD20();
 		} else
@@ -420,9 +327,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// ADC の初期化
 			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 			if( sAppData.sFlash.sData.i16param&LOWENERGY ){
@@ -439,29 +343,24 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_LOWENERGY ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
 
 			// ADC の初期化
 			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 			vInitAppADXL345_LowEnergy();
 		} else
 		// TSL2561
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
-				sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
-				sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 
-				// ADC の初期化
-				vInitADC();
+			// ADC の初期化
+			vInitADC();
 
-				// Other Hardware
-				vInitHardware(FALSE);
-
-				// イベント処理の初期化
-				vInitAppTSL2561();
+			// イベント処理の初期化
+			vInitAppTSL2561();
 		} else
 		//	LM61等のアナログセンサ用
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
@@ -474,8 +373,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// ADC の初期化
 			vInitADC();
 
-			// Other Hardware
-			vInitHardware(FALSE);
 #ifndef SWING
 			vInitPulseCounter();
 #endif
@@ -491,9 +388,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// ADC の初期化
 			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
 
 			// イベント処理の初期化
 			vInitAppMultiSensor();
@@ -732,53 +626,162 @@ static void vInitPulseCounter() {
  * @param f_warm_start TRUE:スリープ起床時
  */
 static void vInitHardware(int f_warm_start) {
+
 #ifdef OTA
 	vPortSetLo(PORT_OUT4);		//	WD
 	vPortAsOutput(PORT_OUT4);		//	WD
 	vPortAsOutput(PORT_INPUT3);		//	WD_ENB
+
+	// MONOSTICK を想定する
+	vPortAsOutput(PORT_OUT1);
+	vAHI_DoSetDataOut(2, 0);
+	bAHI_DoEnableOutputs(TRUE); // MISO を出力用に
+
+	// 設定モードとして起動
+	sAppData.bConfigMode = TRUE;
 #else
-	// 入力ポートを明示的に指定する
-	if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
-		vPortAsInput(DIO_BUTTON);
-		if((sAppData.sFlash.sData.i16param&2) != 0){		// 両方のエッジをとる場合
-			vPortAsInput( PORT_INPUT2 );
-			vPortDisablePullup(DIO_BUTTON);
-			vPortDisablePullup(PORT_INPUT2);
-			vAHI_DioWakeEnable(PORT_INPUT_MASK|PORT_INPUT_SUBMASK , 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
-		}else if( sAppData.sFlash.sData.i16param == 1 ){	// 立下りを見る場合
-			vPortDisablePullup(DIO_BUTTON);
-			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上りに設定）
+	if(!f_warm_start){
+		// リセットICの無効化(イの一番に処理)
+		vPortSetLo(DIO_VOLTAGE_CHECKER);
+		vPortAsOutput(DIO_VOLTAGE_CHECKER);
+		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
+
+		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
+		vPortSetHi(DIO_SUPERCAP_CONTROL);
+		vPortAsOutput(DIO_SUPERCAP_CONTROL);
+		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
+
+		// WDT用出力の初期化
+		vPortSetLo(3);
+		vPortAsOutput(3);
+		vPortDisablePullup(3);
+
+		//	送信ステータスなどのLEDのための出力
+		LED_OFF(LED);
+		vPortAsOutput(LED);
+		vPortDisablePullup(LED);
+
+	// M2がLoなら、設定モードとして動作する
+#ifdef SWING
+		u8ConfPort = 16;		// SWINGのSETピンはSCLの副ポート
+#endif
+
+		vPortAsInput(u8ConfPort);
+		bool_t bSetPort = bPortRead(u8ConfPort);
+		if( u8PowerUp == 0x00 && (IS_APPCONF_OPT_PASS_SETTINGS() == FALSE || bSetPort ) ){
+			sAppData.bConfigMode = TRUE;
+		}
+#ifdef SWING
+		vPortDisablePullup(u8ConfPort);
+		u8ConfPort = 17;		// SDA
+		vPortAsInput(u8ConfPort);
+		if( bPortRead(u8ConfPort) &&
+			sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON &&
+			!sAppData.bConfigMode ){
+			sAppData.sFlash.sData.u8mode = PKT_ID_LM61;
+		}
+		vPortDisablePullup(u8ConfPort);
+#endif
+
+	// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
+#ifdef SWING
+		// I2Cセンサを使用するときとそれ以外の時で使用するポートを変える。
+		if( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50 ){
+			DIO_SNS_POWER = 1;
 		}else{
+			DIO_SNS_POWER = 16;
+		}
+#else
+		DIO_SNS_POWER = PORT_OUT3;
+#endif
+
+		// SWINGのインタラクティブモードの場合はセンサ用のDIO制御は有効にしない
+		if(u8ConfPort == PORT_CONF2 || sAppData.bConfigMode == FALSE ){
+			vPortSetSns(TRUE);
+			vPortAsOutput(DIO_SNS_POWER);
+			vPortDisablePullup(DIO_SNS_POWER);
+		}
+
+#ifdef SWING
+		// DIO1がLoもしくはI2CセンサモードだったらApp_Tagモードに変更
+		vPortAsInput(1);
+		if( (bPortRead(1) &&
+			IS_APPCONF_OPT_APP_TWELITE() &&
+			!sAppData.bConfigMode) ||
+			( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) ){
+			sAppData.sFlash.sData.u32Opt -= 0x10;
+		}
+		vPortDisablePullup(1);
+#endif
+
+		// configure network
+		if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
+			sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
+			sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
+		}else{
+			if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID ){
+				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
+			}else{
+				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
+			}
+			sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
+		}
+
+
+		// 入力ポートを明示的に指定する
+		if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
+			vPortAsInput(DIO_BUTTON);
+			if((sAppData.sFlash.sData.i16param&2) != 0){		// 両方のエッジをとる場合
+				vPortAsInput( PORT_INPUT2 );
+				vPortDisablePullup(DIO_BUTTON);
+				vPortDisablePullup(PORT_INPUT2);
+				vAHI_DioWakeEnable(PORT_INPUT_MASK|PORT_INPUT_SUBMASK , 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
+			}else if( sAppData.sFlash.sData.i16param == 1 ){	// 立下りを見る場合
+				vPortDisablePullup(DIO_BUTTON);
+				vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上りに設定）
+			}else{
+				vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
+			}
+
+			// 連照してDI1の状態を確定する場合
+			if( sAppData.sFlash.sData.i16param&0x200 ){
+				sAppData.sBTM_Config.bmPortMask = PORT_INPUT_MASK;
+				sAppData.sBTM_Config.u16Tick_ms = 1;
+				//sAppData.sBTM_Config.u8MaxHistory = 20;
+				sAppData.sBTM_Config.u8MaxHistory = sAppData.sFlash.sData.u8wait;
+				sAppData.sBTM_Config.u8DeviceTimer = 0xFF; // TickTimer を流用する。
+				sAppData.pr_BTM_handler = prBTM_InitExternal(&sAppData.sBTM_Config);
+				vBTM_Enable();
+			}
+		}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
+			if(sAppData.sFlash.sData.i16param&AIRVOLUME){
+				vPortAsInput(PORT_INPUT2);
+				vPortAsInput(PORT_INPUT3);
+				vPortDisablePullup(PORT_INPUT2);
+				vPortDisablePullup(PORT_INPUT3);
+				vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上りに設定)
+			}else{
+				vPortAsInput(DIO_BUTTON);
+				vPortAsInput(PORT_INPUT2);
+				vPortAsInput(PORT_INPUT3);
+				vPortDisablePullup(PORT_INPUT2);
+				vPortDisablePullup(PORT_INPUT3);
+				vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上りに設定)
+			}
+		}else{
+			vPortAsInput(DIO_BUTTON);
+			//	入力ボタンのプルアップを停止する
+			if (sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER){	// ドアタイマー
+				vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
+			}
 			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 			vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
 		}
-	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
-		if(sAppData.sFlash.sData.i16param&AIRVOLUME){
-			vPortAsInput(PORT_INPUT2);
-			vPortAsInput(PORT_INPUT3);
-			vPortDisablePullup(PORT_INPUT2);
-			vPortDisablePullup(PORT_INPUT3);
-			vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上りに設定)
-		}else{
-			vPortAsInput(DIO_BUTTON);
-			vPortAsInput(PORT_INPUT2);
-			vPortAsInput(PORT_INPUT3);
-			vPortDisablePullup(PORT_INPUT2);
-			vPortDisablePullup(PORT_INPUT3);
-			vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上りに設定)
-		}
-	}else{
-		vPortAsInput(DIO_BUTTON);
-		//	入力ボタンのプルアップを停止する
-		if (sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER){	// ドアタイマー
-			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
-		}
-		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-		vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
 	}
 #endif
 
