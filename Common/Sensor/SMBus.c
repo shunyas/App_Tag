@@ -88,7 +88,7 @@ PUBLIC void vSMBusInit(void)
 {
 
 	/* run bus at 100KHz */
-	vAHI_SiMasterConfigure(TRUE, FALSE, 31);
+	vAHI_SiMasterConfigure(TRUE, FALSE, 7);
 			// 16/[(PreScaler + 1) x 5]MHz
 			//		--> 31:100KHz, 7:400KHz
 

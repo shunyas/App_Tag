@@ -364,6 +364,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 	case 'p': // センサのパラメータ
 		V_PRINTF("Input Sensor Parameter(-32767 - 32767): ");
+//		V_PRINTF("Input Sensor Parameter\r\n( 0:NORMAL, 1:SINGLE TAP, 2:DOUBLE TAP, 3:FREE FALL, 4:NEKOTTER  ): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 6,
 				E_APPCONF_SER_PARAM);
 		break;
@@ -621,7 +622,8 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			if (u32val == 0) {
 
 			} else
-			if (u32val >= 100 && u32val <= 86400000) {
+//			if (u32val >= 100 && u32val <= 86400000) {
+			if (u32val >= 30 && u32val <= 86400000) {
 				sConfig_UnSaved.u32Slp = u32val;
 				V_PRINTF("%d"LB, u32val);
 			} else {
@@ -642,7 +644,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 	case E_APPCONF_SER_PARAM:
 		_C {
 //			int val = u32string2dec(pu8str, u8idx);
-			int val = atoi((char*)pu8str);
+			int32 val = atoi((char*)pu8str);
 			V_PRINTF(LB"-> ");
 			sConfig_UnSaved.i16param = val;
 			V_PRINTF("%d"LB, val);

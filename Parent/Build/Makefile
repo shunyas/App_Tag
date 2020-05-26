@@ -93,6 +93,12 @@ ifeq ($(TWE_BOARD_MODEL),TOCOSTICK)
   CFLAGS += -DUSE_TOCOSTICK
   OBJDIR_SUFF += _ToCoStick
   TARGET_SUFF += _ToCoStick
+else
+	ifeq ($(TWE_BOARD_MODEL),TWX0003)
+		CFLAGS += -DTWX0003P
+		OBJDIR_SUFF += _TWX0003P
+		TARGET_SUFF += _TWX0003P
+	endif
 endif 
 
 ### Build Options

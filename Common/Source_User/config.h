@@ -48,8 +48,15 @@ extern "C" {
 
 /* Specify the PAN ID and CHANNEL to be used by tags, readers and gateway */
 #define APP_ID              0x67726305
+#define NEKO_ID              0x67726308
 #define APP_NAME            "Samp_Monitor"
+#define NEKO_NAME            "Samp_Nekotter"
 #define CHANNEL             15
+#ifdef TWX0003
+#define DEFAULT_SENSOR		0x31
+#else
+#define DEFAULT_SENSOR		0x10
+#endif
 //#define CHMASK              ((1UL << CHANNEL) | (1UL << (CHANNEL+5)) | (1UL << (CHANNEL+10)))
 #define CHMASK              (1UL << CHANNEL)
 
@@ -87,7 +94,8 @@ extern "C" {
 #define DIO_SUPERCAP_CONTROL (PORT_OUT2) // DO2: SUPER CAP の電圧が上昇すると LO に設定
 #define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
 
-#define PORT_INPUT_MASK ((1UL << PORT_UART0_RX) | (1UL <<  DIO_BUTTON))
+#define PORT_INPUT_MASK ( 1UL << DIO_BUTTON)
+#define PORT_INPUT_MASK_ADXL345 ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
 #define PORT_INPUT_MASK_ACL ((1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON))
 
 #ifdef PARENT

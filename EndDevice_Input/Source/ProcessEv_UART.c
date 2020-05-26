@@ -94,6 +94,9 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			u16RetryDur = sAppData.sFlash.sData.u8wait * 10;
 		}
 
+		// ポート出力する
+		vPortAsOutput(PORT_RTS0);
+
 		// RC クロックのキャリブレーションを行う
 		ToCoNet_u16RcCalib(sAppData.sFlash.sData.u16RcClock);
 	}

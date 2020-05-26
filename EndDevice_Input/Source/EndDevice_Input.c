@@ -59,6 +59,8 @@
 #include "Interactive.h"
 #include "flash.h"
 
+#include "ADXL345.h"
+
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
@@ -86,7 +88,9 @@ tsCbHandler *psCbHandler = NULL;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 static void vInitHardware(int f_warm_start);
+#ifndef TWX0003
 static void vInitPulseCounter();
+#endif
 static void vInitADC();
 
 static void vSerialInit();
@@ -148,9 +152,14 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
 
 		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
+#ifdef TWX0003
+		// このポートは入力扱いとして何も設定しない
+		vPortAsInput(DIO_SUPERCAP_CONTROL);
+#else
 		vPortSetHi(DIO_SUPERCAP_CONTROL);
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
+#endif
 
 		// アプリケーション保持構造体の初期化
 		memset(&sAppData, 0x00, sizeof(sAppData));
@@ -164,14 +173,16 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		//	入力ボタンのプルアップを停止する
 		if ((sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER)	// ドアタイマー
-			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
+			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
 			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
 		}
 
 		// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
+#ifndef TWX0003
 		vPortSetSns(TRUE);
 		vPortAsOutput(DIO_SNS_POWER);
 		vPortDisablePullup(DIO_SNS_POWER);
+#endif
 
 		// configure network
 		sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
@@ -206,8 +217,9 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// インタラクティブモードの初期化
 			Interactive_vInit();
 		} else
+#ifndef TWX0003
 		//	ボタン起動モード
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON ) {
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ) {
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
 			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
 
@@ -245,6 +257,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppDoorTimer();
 		} else
+#endif
 		// SHT21
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -258,6 +271,20 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppSHT21();
+#ifndef TWX0003
+		} else
+		// S11059-02
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_S1105902 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppS1105902();
 		} else
 		// ADT7410
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADT7410 ) {
@@ -301,6 +328,46 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppLIS3DH();
 		} else
+		// L3GD20
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_L3GD20 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			// ADC の初期化
+			vInitADC();
+			// Other Hardware
+			vInitHardware(FALSE);
+			// イベント処理の初期化
+			vInitAppL3GD20();
+		} else
+
+		// ADXL345
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppADXL345();
+		} else
+		// TSL2561
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
+				sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+				sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+				// ADC の初期化
+				vInitADC();
+
+				// Other Hardware
+				vInitHardware(FALSE);
+
+				// イベント処理の初期化
+				vInitAppTSL2561();
+		} else
 		//	LM61等のアナログセンサ用
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
 			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
@@ -318,6 +385,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppStandard();
+#endif
 		}
 
 		// イベント処理関数の登録
@@ -359,8 +427,10 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 				FALSE);
 
 		// センサー用の制御 (Lo:Active)
+#ifndef TWX0003
 		vPortSetSns(TRUE);
 		vPortAsOutput(DIO_SNS_POWER);
+#endif
 
 		// Other Hardware
 		Interactive_vReInit();
@@ -371,7 +441,7 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
 		// センサ特有の初期化
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON ) {
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ) {
 			// ADC の初期化
 			vInitADC();
 		} else
@@ -382,6 +452,11 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		} else
 		// SHT21
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// S11059-02
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_S1105902 ) {
 			// ADC の初期化
 			vInitADC();
 		} else
@@ -397,6 +472,21 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		} else
 		// LIS3DH
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// L3GD20
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_L3GD20 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// ADXL345
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// TSL2561
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
 			// ADC の初期化
 			vInitADC();
 		} else
@@ -505,6 +595,7 @@ static void vInitADC() {
  * パルスカウンタの初期化
  * - cold boot 時に1回だけ初期化する
  */
+#ifndef TWX0003
 static void vInitPulseCounter() {
 	// カウンタの設定
 	bAHI_PulseCounterConfigure(
@@ -538,6 +629,7 @@ static void vInitPulseCounter() {
 	// カウンタのスタート
 	bAHI_StartPulseCounter(E_AHI_PC_1); // start it
 }
+#endif
 
 /**
  * ハードウェアの初期化を行う
@@ -545,57 +637,22 @@ static void vInitPulseCounter() {
  */
 static void vInitHardware(int f_warm_start) {
 	// 入力ポートを明示的に指定する
-	vPortAsInput(DIO_BUTTON);
-
-	if( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH &&
-			sAppData.sFlash.sData.i16param == 1
-	){
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
+		vPortAsInput(DIO_BUTTON);
+		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
+		vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
+	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
 		vPortAsInput(PORT_INPUT2);
+		vPortAsInput(PORT_INPUT3);
+		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
+		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
 	}
 
 	// Serial Port の初期化
 	vSerialInit();
 
-	// PWM の初期化
-	if ( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ) {
-# ifndef JN516x
-#  warning "IO_TIMER is not implemented on JN514x"
-# endif
-# ifdef JN516x
-		memset(&sTimerPWM[0], 0, sizeof(tsTimerContext));
-		vAHI_TimerFineGrainDIOControl(0x7); // bit 0,1,2 をセット (TIMER0 の各ピンを解放する, PWM1..4 は使用する)
-		vAHI_TimerSetLocation(E_AHI_TIMER_1, TRUE, TRUE); // IOの割り当てを設定
-
-		// PWM
-		int i;
-		for (i = 0; i < 1; i++) {
-			const uint8 au8TimTbl[] = {
-				E_AHI_DEVICE_TIMER1,
-				//E_AHI_DEVICE_TIMER2
-				//E_AHI_DEVICE_TIMER3,
-				//E_AHI_DEVICE_TIMER4
-			};
-			sTimerPWM[i].u16Hz = 1000;
-			sTimerPWM[i].u8PreScale = 0;
-			sTimerPWM[i].u16duty = 1024; // 1024=Hi, 0:Lo
-			sTimerPWM[i].bPWMout = TRUE;
-			sTimerPWM[i].bDisableInt = TRUE; // 割り込みを禁止する指定
-			sTimerPWM[i].u8Device = au8TimTbl[i];
-			vTimerConfig(&sTimerPWM[i]);
-			vTimerStart(&sTimerPWM[i]);
-		}
-# endif
-	}
-
 	// SMBUS の初期化
-
-//	if (IS_APPCONF_OPT_SHT21()) {
-	if ( sAppData.sFlash.sData.u8mode ==  PKT_ID_SHT21 ||
-		 sAppData.sFlash.sData.u8mode ==  PKT_ID_ADT7410 ||
-		 sAppData.sFlash.sData.u8mode ==  PKT_ID_LIS3DH ||
-		 sAppData.sFlash.sData.u8mode ==  PKT_ID_MPL115A2	) {
-		vSMBusInit();
-	}
+	vSMBusInit();
 }
 
 /**
@@ -626,11 +683,16 @@ void vSerialInit(void) {
  * 初期化メッセージ
  */
 void vSerInitMessage() {
-	V_PRINTF(LB LB "*** " APP_NAME " (ED_Inp) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 && sAppData.sFlash.sData.i16param == NEKOTTER ){
+		V_PRINTF(LB LB "*** " NEKO_NAME " (ED_Inp) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+	}else{
+		V_PRINTF(LB LB "*** " APP_NAME " (ED_Inp) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+	}
 	V_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d Calib=%d",
 			sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
 			sAppData.sFlash.sData.u8id,
 			sAppData.sFlash.sData.u16RcClock);
+	V_FLUSH();
 }
 
 /**

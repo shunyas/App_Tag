@@ -15,12 +15,15 @@
 #include "jendefs.h"
 #include "AppHardwareApi.h"
 #include "string.h"
+#include "fprintf.h"
 
 #include "sensor_driver.h"
-#include "SHT21.h"
+#include "S1105902.h"
 #include "SMBus.h"
 
 #include "ccitt8.h"
+
+#include "utils.h"
 
 #undef SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
@@ -28,25 +31,32 @@
 # include <fprintf.h>
 extern tsFILE sDebugStream;
 #endif
+tsFILE sSerStream;
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define SHT21_ADDRESS     (0x40)
+#define S1105902_ADDRESS	(0x2A)
 
-#define SHT21_TRIG_TEMP   (0xf3)
-#define SHT21_TRIG_HUMID  (0xf5)
+#define S1105902_CTRL		(0x00)
+#define S1105902_TIMING		(0x01)
 
-#define SHT21_WRITE_REG   (0xe6)
-#define SHT21_READ_REG    (0xe7)
+#define S1105902_R			(0x03)
+#define S1105902_G			(0x05)
+#define S1105902_B			(0x07)
+#define S1105902_I			(0x09)
 
-#define SHT21_SOFT_RST    (0xfe)
+#define S1105902_CONVTIME    (24+2) // 24ms MAX
 
-#define SHT21_CONVTIME_TEMP  (11+2) // 11ms
-#define SHT21_CONVTIME_HUMID (15+2) // 15ms
+#define S1105902_DATA_NOTYET  (-32768)
+#define S1105902_DATA_ERROR   (-32767)
 
-#define SHT21_DATA_NOTYET  (-32768)
-#define SHT21_DATA_ERROR   (-32767)
+const uint8 S1105902_AXIS[] = {
+		S1105902_R,
+		S1105902_G,
+		S1105902_B,
+		S1105902_I
+};
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -55,7 +65,8 @@ extern tsFILE sDebugStream;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent);
+PRIVATE bool_t bGetComp( uint8 u8comp, uint8* au8data );
+PRIVATE void vProcessSnsObj_S1105902(void *pvObj, teEvent eEvent);
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -64,51 +75,39 @@ PRIVATE void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent);
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
-const uint8 au8TickWait[SHT21_IDX_END] = {
-	SHT21_CONVTIME_TEMP,
-	SHT21_CONVTIME_HUMID
-};
-const uint8 au8TrigCmd[SHT21_IDX_END] = {
-	SHT21_TRIG_TEMP,
-	SHT21_TRIG_HUMID
-};
-
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vSHT21_Init(tsObjData_SHT21 *pData, tsSnsObj *pSnsObj) {
+void vS1105902_Init(tsObjData_S1105902 *pData, tsSnsObj *pSnsObj) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
-	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_SHT21;
+	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_S1105902;
 
-	memset((void*)pData, 0, sizeof(tsObjData_SHT21));
+	memset((void*)pData, 0, sizeof(tsObjData_S1105902));
 }
 
-void vSHT21_Final(tsObjData_SHT21 *pData, tsSnsObj *pSnsObj) {
+void vS1105902_Final(tsObjData_S1105902 *pData, tsSnsObj *pSnsObj) {
 	pSnsObj->u8State = E_SNSOBJ_STATE_INACTIVE;
 }
 
+
+
 /****************************************************************************
  *
- * NAME: vSHT21reset
+ * NAME: bS1105902reset
  *
  * DESCRIPTION:
- *   to reset SHT21 device
+ *   to reset S1105902 device
  *
  * RETURNS:
  * bool_t	fail or success
  *
  ****************************************************************************/
-PUBLIC bool_t bSHT21reset()
+PUBLIC bool_t bS1105902reset()
 {
-	bool_t bOk = TRUE;
-
-	bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_SOFT_RST, 0, NULL);
-	// then will need to wait at least 15ms
-
-	return bOk;
+	return TRUE;
 }
 
 /****************************************************************************
@@ -122,106 +121,91 @@ PUBLIC bool_t bSHT21reset()
  * void
  *
  ****************************************************************************/
-PUBLIC bool_t bSHT21startRead(uint8 u8trig)
+PUBLIC bool_t bS1105902startRead()
 {
 	bool_t bOk = TRUE;
-	uint8 u8reg;
+	uint8 u8com;
 
-	// read user register setting
-	bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_READ_REG, 0, NULL);
-	if (!bOk) return FALSE;
-	bOk &= bSMBusSequentialRead(SHT21_ADDRESS, 1, &u8reg);
-	if (!bOk) return FALSE;
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 READ REG %x", u8reg);
-#endif
-
-	if ((u8reg & 0x81) != 0x81) {
-		u8reg &= 0x7E; // mask bit1 ... 6
-		u8reg |= 0x81; // write bit0, 7
-					   // 0x81:11bit, 0x80:13bit, 0x01:12bit, 0x00:14bit
-
-		// set register mode
-		bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_WRITE_REG, 1, &u8reg);
-		if (!bOk) return FALSE;
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 WRITE REG %x", u8reg);
-#endif
-	}
-
-	// start conversion (will take some ms according to bits accuracy)
-	bOk &= bSMBusWrite(SHT21_ADDRESS, u8trig, 0, NULL);
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 TRIG %x", u8trig);
-#endif
+	// Set Option
+//	u8com = 0x00;	// ADC起動、スリープ解除、Lowゲイン、固定時間、87.5us
+//	u8com = 0x08;	// ADC起動、スリープ解除、Highゲイン、固定時間、87.5us
+//	u8com = 0x01;	// ADC起動、スリープ解除、Lowゲイン、固定時間、1.4ms
+	u8com = 0x09;	// ADC起動、スリープ解除、Highゲイン、固定時間、1.4ms
+//	u8com = 0x03;	// ADC起動、スリープ解除、Lowゲイン、固定時間、22.4ms
+//	u8com = 0x0B;	// ADC起動、スリープ解除、Highゲイン、固定時間、22.4ms
+	bOk &= bSMBusWrite( S1105902_ADDRESS, S1105902_CTRL, 1, &u8com );
 
 	return bOk;
 }
 
 /****************************************************************************
  *
- * NAME: u16SHT21readResult
+ * NAME: u16S1105902readResult
  *
  * DESCRIPTION:
  * Wrapper to read a measurement, followed by a conversion function to work
  * out the value in degrees Celcius.
  *
  * RETURNS:
- * int16: temperature in degrees Celcius x 100 (-4685 to 12886)
+ * int16: 0~10000 [1 := 5Lux], 100 means 500 Lux.
  *        0x8000, error
  *
  * NOTES:
  * the data conversion fomula is :
- *      TEMP:  -46.85+175.72*ReadValue/65536
- *      HUMID: -6+125*ReadValue/65536
- *
- *    where the 14bit ReadValue is scaled up to 16bit
+ *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC int16 i16SHT21readResult(int16 *pi16Temp, int16 *pi16Humid)
+PUBLIC uint16 u16S1105902readResult( uint8 u8comp )
 {
-	bool_t bOk = TRUE;
-    int32 i32result;
-    uint8 au8data[4];
+	bool_t	bOk = TRUE;
+	uint16	u16result=0;
+	uint8	au8data[2];
 
-    bOk &= bSMBusSequentialRead(SHT21_ADDRESS, 3, au8data);
-    if(!bOk) return SHT21_DATA_NOTYET; // error
-#ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT_DT %x %x %x", au8data[0], au8data[1], au8data[2]);
-#endif
+	//	各軸の読み込み
+	switch( u8comp ){
+		case S1105902_IDX_R:
+			bOk &= bGetComp( S1105902_IDX_R, au8data );
+			break;
+		case S1105902_IDX_G:
+			bOk &= bGetComp( S1105902_IDX_G, au8data );
+			break;
+		case S1105902_IDX_B:
+			bOk &= bGetComp( S1105902_IDX_B, au8data );
+			break;
+		case S1105902_IDX_I:
+			bOk &= bGetComp( S1105902_IDX_I, au8data );
+			break;
+		default:
+			bOk = FALSE;
+	}
+	u16result = (au8data[0] << 8) | au8data[1];
 
-	// CRC8 check
-	au8data[3] = u8CCITT8(au8data, 2);
-	if (au8data[2] != au8data[3]) return SHT21_DATA_ERROR;
+	if (bOk == FALSE) {
+		u16result = SENSOR_TAG_DATA_ERROR;
+	}
 
-    i32result = (au8data[1] & 0xfc) | (au8data[0] << 8);
-    if (au8data[1] & 0x02) {
-    	// bit1:1 --> humid
-		i32result = ((12500*i32result + 32768) >> 16) - 600;
-        if (pi16Temp) *pi16Humid = (int16)i32result;
-    } else {
-    	// bit1:0 --> temp
-        i32result = ((17572*i32result + 32768) >> 16) - 4685;
-        if (pi16Temp) *pi16Temp = (int16)i32result;
-    }
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 CORRECT DATA %s=%d",
-//		(au8data[1] & 0x02) ? "HUMID" : "TEMP", i32result);
-#endif
-
-    return (int16)i32result;
+    return u16result;
 }
-
 
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-// the Main loop
-void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent) {
-	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
-	tsObjData_SHT21 *pObj = (tsObjData_SHT21 *)pSnsObj->pvData;
+PRIVATE bool_t bGetComp( uint8 u8comp, uint8* au8data )
+{
+	bool_t bOk = TRUE;
 
-	// general process
+	bOk &= bSMBusWrite( S1105902_ADDRESS, S1105902_AXIS[u8comp], 0, NULL );
+	bOk &= bSMBusSequentialRead( S1105902_ADDRESS, 2, au8data );
+
+	return bOk;
+}
+
+// the Main loop
+PRIVATE void vProcessSnsObj_S1105902(void *pvObj, teEvent eEvent) {
+	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
+	tsObjData_S1105902 *pObj = (tsObjData_S1105902 *)pSnsObj->pvData;
+
+	// general process (independent from each state)
 	switch (eEvent) {
 		case E_EVENT_TICK_TIMER:
 			if (pObj->u8TickCount < 100) {
@@ -234,10 +218,9 @@ vfPrintf(&sDebugStream, "+");
 		case E_EVENT_START_UP:
 			pObj->u8TickCount = 100; // expire immediately
 #ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
+vfPrintf(&sDebugStream, "\n\rS1105902 WAKEUP");
 #endif
-		break;
-
+			break;
 		default:
 			break;
 	}
@@ -252,18 +235,15 @@ vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
 	case E_SNSOBJ_STATE_IDLE:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			pObj->u8IdxMeasuruing = SHT21_IDX_BEGIN;
 			break;
 
 		case E_ORDER_KICK:
-			pObj->ai16Result[SHT21_IDX_TEMP] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[SHT21_IDX_HUMID] = SENSOR_TAG_DATA_ERROR;
-
 			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
 
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rSHT21 KICKED");
+			vfPrintf(&sDebugStream, "\n\rS1105902 KICKED");
 			#endif
+
 			break;
 
 		default:
@@ -274,18 +254,23 @@ vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
 	case E_SNSOBJ_STATE_MEASURING:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-#ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
-#endif
+			pObj->au16Result[S1105902_IDX_R] = SENSOR_TAG_DATA_ERROR;
+			pObj->au16Result[S1105902_IDX_G] = SENSOR_TAG_DATA_ERROR;
+			pObj->au16Result[S1105902_IDX_B] = SENSOR_TAG_DATA_ERROR;
+			pObj->au16Result[S1105902_IDX_I] = SENSOR_TAG_DATA_ERROR;
+			pObj->u8TickWait = S1105902_CONVTIME;
 
-			pObj->ai16Result[pObj->u8IdxMeasuruing] = SENSOR_TAG_DATA_ERROR;
-			pObj->u8TickWait = au8TickWait[pObj->u8IdxMeasuruing];
-
-			// kick I2C communication
-			if (!bSHT21startRead(au8TrigCmd[pObj->u8IdxMeasuruing])) {
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE); // error
+			pObj->bBusy = TRUE;
+#ifdef S1105902_ALWAYS_RESET
+			u8reset_flag = TRUE;
+			if (!bS1105902reset()) {
+				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
-
+#else
+			if (!bS1105902startRead()) { // kick I2C communication
+				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+			}
+#endif
 			pObj->u8TickCount = 0;
 			break;
 
@@ -295,44 +280,26 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 
 		// wait until completion
 		if (pObj->u8TickCount > pObj->u8TickWait) {
-			int16 i16ret;
-			i16ret = i16SHT21readResult(
-					&(pObj->ai16Result[SHT21_IDX_TEMP]),
-					&(pObj->ai16Result[SHT21_IDX_HUMID]) );
-
-			if (i16ret == SENSOR_TAG_DATA_ERROR) {
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE); // error
-			} else
-			if (i16ret == SENSOR_TAG_DATA_NOTYET) {
-				// still conversion
-				#ifdef SERIAL_DEBUG
-				vfPrintf(&sDebugStream, "\r\nSHT_ND");
-				#endif
-
-				pObj->u8TickCount /= 2; // wait more...
-			} else {
-				// data arrival
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURE_NEXT);
-			}
-		}
-		break;
-
-	case E_SNSOBJ_STATE_MEASURE_NEXT:
-		switch (eEvent) {
-			case E_EVENT_NEW_STATE:
-				pObj->u8IdxMeasuruing++;
-
-				if (pObj->u8IdxMeasuruing < SHT21_IDX_END) {
-					// complete all data
-					vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
-				} else {
-					// complete all data
-					vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+#ifdef S1105902_ALWAYS_RESET
+			if (u8reset_flag) {
+				u8reset_flag = 0;
+				if (!bS1105902startRead()) {
+					vS1105902_new_state(pObj, E_SNSOBJ_STATE_COMPLETE);
 				}
-				break;
 
-			default:
+				pObj->u8TickCount = 0;
+				pObj->u8TickWait = S1105902_CONVTIME;
 				break;
+			}
+#endif
+			pObj->au16Result[S1105902_IDX_R] = u16S1105902readResult(S1105902_IDX_R);
+			pObj->au16Result[S1105902_IDX_G] = u16S1105902readResult(S1105902_IDX_G);
+			pObj->au16Result[S1105902_IDX_B] = u16S1105902readResult(S1105902_IDX_B);
+			pObj->au16Result[S1105902_IDX_I] = u16S1105902readResult(S1105902_IDX_I);
+
+			// data arrival
+			pObj->bBusy = FALSE;
+			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 		}
 		break;
 
@@ -340,9 +307,7 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rSHT_CP: T%d H%d",
-					pObj->ai16Result[SHT21_IDX_TEMP],
-					pObj->ai16Result[SHT21_IDX_HUMID]);
+			vfPrintf(&sDebugStream, "\n\rS1105902_CP: %d", pObj->i16Result);
 			#endif
 
 			break;
@@ -361,7 +326,6 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 		break;
 	}
 }
-
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

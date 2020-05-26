@@ -46,9 +46,13 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_ADT7410 0x32
 #define PKT_ID_MPL115A2 0x33
 #define PKT_ID_LIS3DH 0x34
+#define PKT_ID_ADXL345 0x35
+#define PKT_ID_TSL2561 0x36
+#define PKT_ID_L3GD20 0x37
+#define PKT_ID_S1105902 0x38
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
-#define PKT_ID_BOTTON 0xFE
+#define PKT_ID_BUTTON 0xFE
 
 /*
  * 標準ポート定義 (TWE-Lite DIP)
@@ -73,7 +77,6 @@ extern const uint8 au8EncKey[];
 
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
-
 #else	//	USE_TOCOSTICK
 #define PORT_OUT1 18
 #define PORT_OUT2 19
@@ -90,6 +93,19 @@ extern const uint8 au8EncKey[];
 #define PORT_UART0_RX 7
 #endif	//	USE_TOCOSTICK
 #elif defined(JN514x)
+#ifdef TWX0003
+#warning "IO CONF IS FOR TWX-0003!"
+
+#define PORT_OUT1 0 // TWX-0003 のリセット制御ピン
+#define PORT_OUT2 PORT_KIT_LED2
+#define PORT_OUT3 PORT_KIT_LED1
+#define PORT_INPUT1 8 // TWX-0003 のボタン
+#define PORT_INPUT2 5
+#define PORT_INPUT3 PORT_KIT_SW2
+#define PORT_INPUT4 PORT_KIT_SW3
+#define PORT_UART0_RX 7
+#define PORT_CONF2 PORT_KIT_SW1
+#else
 #define PORT_OUT1 PORT_KIT_LED1
 #define PORT_OUT2 PORT_KIT_LED2
 #define PORT_OUT3 PORT_KIT_LED3
@@ -103,6 +119,7 @@ extern const uint8 au8EncKey[];
 #define PORT_CONF3 8
 #define PORT_BAUD 12
 #define PORT_UART0_RX 7
+#endif
 #endif
 
 #endif /* COMMON_H_ */

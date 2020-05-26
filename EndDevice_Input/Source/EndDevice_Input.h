@@ -88,6 +88,11 @@ typedef struct _sCbHandler {
 	void (*pf_cbToCoNet_vTxEvent)(uint8 u8CbId, uint8 bStatus);
 } tsCbHandler;
 
+/**
+ * ToCoStuff用 LEDのポート名
+ */
+#define LED1	0
+
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
@@ -97,9 +102,13 @@ extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 void vInitAppStandard();
 void vInitAppBotton();
 void vInitAppSHT21();
+void vInitAppS1105902();
 void vInitAppADT7410();
 void vInitAppMPL115A2();
 void vInitAppLIS3DH();
+void vInitAppL3GD20();
+void vInitAppADXL345();
+void vInitAppTSL2561();
 void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();

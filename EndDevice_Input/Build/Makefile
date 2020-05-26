@@ -52,9 +52,13 @@ APPSRC += adc.c
 APPSRC += SMBus.c
 APPSRC += BH1715.c
 APPSRC += SHT21.c
+APPSRC += S1105902.c
 APPSRC += ADT7410.c
+APPSRC += ADXL345.c
 APPSRC += MPL115A2.c
 APPSRC += LIS3DH.c
+APPSRC += L3GD20.c
+APPSRC += TSL2561.c
 APPSRC += sensor_driver.c
 
 APPSRC += Interactive.c
@@ -71,9 +75,13 @@ APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
 APPSRC += ProcessEv_SHT21.c
+APPSRC += ProcessEv_S1105902.c
 APPSRC += ProcessEv_ADT7410.c
+APPSRC += ProcessEv_TSL2561.c
+APPSRC += ProcessEv_ADXL345.c
 APPSRC += ProcessEv_MPL115A2.c
 APPSRC += ProcessEv_LIS3DH.c
+APPSRC += ProcessEv_L3GD20.c
 APPSRC += ProcessEv_UART.c
 
 ### Target type
@@ -102,6 +110,14 @@ include ../../../../MkFiles/toconet.mk
 #
 #CFLAGS += -DDUMMY
 CFLAGS += -DENDDEVICE_INPUT
+
+BOARD ?=
+
+ifeq ($(BOARD),TWX0003)
+  CFLAGS += -DTWX0003
+  OBJDIR_SUFF += _TWX0003
+  TARGET_SUFF += _TWX0003
+endif
 
 ### Build Options
 # プラットフォーム別のビルドをしたり、デバッグ用のビルドのファイル名を変更
@@ -140,7 +156,7 @@ APP_COMMON_SRC_DIR_ADD1 = ../../Common/Sensor
 # コンパイラ付属ライブラリ (math, spp など) を指定します。
 # ※ 各ライブラリの動作保証はありません。
 #
-#LDLIBS += m
+LDLIBS += m
 
 ### Additional linker options 
 # リンカへの追加オプションです。

@@ -1,7 +1,9 @@
 VERSION_MAIN = 1
-VERSION_SUB  = 3
-VERSION_VAR  = 5
+VERSION_SUB  = 4
+VERSION_VAR  = 0
 
+# 1.4.0 TWX0003用に機能限定(SHT21のみ動作する 小サイズバイナリ)
+# 1.3.6 EndDevice_Remote(テスト実装)用に用意したParentからのMessagePoolの通信は、現時点では不要でありコメントアウト
 # 1.3.5 ADT7410の温度計算の修正
 # 1.3.4 LM61 の BIAS 設定の初期化が間違えている
 # 1.3.3 マイナーバグフィックス

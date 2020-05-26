@@ -15,12 +15,15 @@
 #include "jendefs.h"
 #include "AppHardwareApi.h"
 #include "string.h"
+#include "fprintf.h"
 
 #include "sensor_driver.h"
-#include "SHT21.h"
+#include "L3GD20.h"
 #include "SMBus.h"
 
 #include "ccitt8.h"
+
+#include "utils.h"
 
 #undef SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
@@ -28,25 +31,32 @@
 # include <fprintf.h>
 extern tsFILE sDebugStream;
 #endif
+tsFILE sSerStream;
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define SHT21_ADDRESS     (0x40)
+#define L3GD20_ADDRESS		(0x6B)
 
-#define SHT21_TRIG_TEMP   (0xf3)
-#define SHT21_TRIG_HUMID  (0xf5)
+#define L3GD20_CTRL_REG1	(0x20)
 
-#define SHT21_WRITE_REG   (0xe6)
-#define SHT21_READ_REG    (0xe7)
+#define L3GD20_X			(0x28)
+#define L3GD20_Y			(0x2A)
+#define L3GD20_Z			(0x2C)
 
-#define SHT21_SOFT_RST    (0xfe)
+#define L3GD20_WHO			(0x0F)
+#define L3GD20_NAME			(0xD4)
 
-#define SHT21_CONVTIME_TEMP  (11+2) // 11ms
-#define SHT21_CONVTIME_HUMID (15+2) // 15ms
+#define L3GD20_CONVTIME    (24+2) // 24ms MAX
 
-#define SHT21_DATA_NOTYET  (-32768)
-#define SHT21_DATA_ERROR   (-32767)
+#define L3GD20_DATA_NOTYET  (-32768)
+#define L3GD20_DATA_ERROR   (-32767)
+
+const uint8 L3GD20_AXIS[] = {
+		L3GD20_X,
+		L3GD20_Y,
+		L3GD20_Z
+};
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -55,7 +65,8 @@ extern tsFILE sDebugStream;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent);
+PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
+PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent);
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -64,48 +75,42 @@ PRIVATE void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent);
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
-const uint8 au8TickWait[SHT21_IDX_END] = {
-	SHT21_CONVTIME_TEMP,
-	SHT21_CONVTIME_HUMID
-};
-const uint8 au8TrigCmd[SHT21_IDX_END] = {
-	SHT21_TRIG_TEMP,
-	SHT21_TRIG_HUMID
-};
-
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vSHT21_Init(tsObjData_SHT21 *pData, tsSnsObj *pSnsObj) {
+void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
-	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_SHT21;
+	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_L3GD20;
 
-	memset((void*)pData, 0, sizeof(tsObjData_SHT21));
+	memset((void*)pData, 0, sizeof(tsObjData_L3GD20));
 }
 
-void vSHT21_Final(tsObjData_SHT21 *pData, tsSnsObj *pSnsObj) {
+void vL3GD20_Final(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
 	pSnsObj->u8State = E_SNSOBJ_STATE_INACTIVE;
 }
 
+
+
 /****************************************************************************
  *
- * NAME: vSHT21reset
+ * NAME: bL3GD20reset
  *
  * DESCRIPTION:
- *   to reset SHT21 device
+ *   to reset L3GD20 device
  *
  * RETURNS:
  * bool_t	fail or success
  *
  ****************************************************************************/
-PUBLIC bool_t bSHT21reset()
+PUBLIC bool_t bL3GD20reset()
 {
 	bool_t bOk = TRUE;
+//	uint8 command = L3GD20_SOFT_COM;
 
-	bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_SOFT_RST, 0, NULL);
+//	bOk &= bSMBusWrite(L3GD20_ADDRESS, L3GD20_SOFT_RST, 1, &command );
 	// then will need to wait at least 15ms
 
 	return bOk;
@@ -122,37 +127,32 @@ PUBLIC bool_t bSHT21reset()
  * void
  *
  ****************************************************************************/
-PUBLIC bool_t bSHT21startRead(uint8 u8trig)
+PUBLIC bool_t bL3GD20startRead()
 {
 	bool_t bOk = TRUE;
-	uint8 u8reg;
-
-	// read user register setting
-	bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_READ_REG, 0, NULL);
-	if (!bOk) return FALSE;
-	bOk &= bSMBusSequentialRead(SHT21_ADDRESS, 1, &u8reg);
-	if (!bOk) return FALSE;
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 READ REG %x", u8reg);
+	uint8 u8com;
+	uint8 u8name = 0x00;
+#ifdef HR_MODE
+	uint8 u8hr = L3GD20_HR;
 #endif
 
-	if ((u8reg & 0x81) != 0x81) {
-		u8reg &= 0x7E; // mask bit1 ... 6
-		u8reg |= 0x81; // write bit0, 7
-					   // 0x81:11bit, 0x80:13bit, 0x01:12bit, 0x00:14bit
-
-		// set register mode
-		bOk &= bSMBusWrite(SHT21_ADDRESS, SHT21_WRITE_REG, 1, &u8reg);
-		if (!bOk) return FALSE;
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 WRITE REG %x", u8reg);
-#endif
+	//	Who am I?
+	bOk &= bSMBusWrite(L3GD20_ADDRESS, L3GD20_WHO, 0, NULL);
+	bOk &= bSMBusSequentialRead(L3GD20_ADDRESS, 1, &u8name);
+	if( !bOk && u8name != L3GD20_NAME ){
+		return FALSE;
 	}
 
-	// start conversion (will take some ms according to bits accuracy)
-	bOk &= bSMBusWrite(SHT21_ADDRESS, u8trig, 0, NULL);
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 TRIG %x", u8trig);
+	// Set Option
+	u8com = 0x0F;	// x,y,z enable, Power on, ODR:95Hz, Cutoff:12.5Hz
+	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_CTRL_REG1, 1, &u8com );
+
+//	u8com = 0x10;	// +-500dps
+//	u8com = 0x20;	// +-2000dps
+//	bOk &= bSMBusWrite( L3GD20_ADDRESS, 0x23, 1, &u8com );
+
+#ifdef HR_MODE
+	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_SET_HR, 1, &u8hr );
 #endif
 
 	return bOk;
@@ -160,68 +160,79 @@ PUBLIC bool_t bSHT21startRead(uint8 u8trig)
 
 /****************************************************************************
  *
- * NAME: u16SHT21readResult
+ * NAME: u16L3GD20readResult
  *
  * DESCRIPTION:
  * Wrapper to read a measurement, followed by a conversion function to work
  * out the value in degrees Celcius.
  *
  * RETURNS:
- * int16: temperature in degrees Celcius x 100 (-4685 to 12886)
+ * int16: 0~10000 [1 := 5Lux], 100 means 500 Lux.
  *        0x8000, error
  *
  * NOTES:
  * the data conversion fomula is :
- *      TEMP:  -46.85+175.72*ReadValue/65536
- *      HUMID: -6+125*ReadValue/65536
- *
- *    where the 14bit ReadValue is scaled up to 16bit
+ *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC int16 i16SHT21readResult(int16 *pi16Temp, int16 *pi16Humid)
+PUBLIC int16 i16L3GD20readResult( uint8 u8axis )
 {
-	bool_t bOk = TRUE;
-    int32 i32result;
-    uint8 au8data[4];
+	bool_t	bOk = TRUE;
+	int16	i16result=0;
+	uint8	au8data[2];
 
-    bOk &= bSMBusSequentialRead(SHT21_ADDRESS, 3, au8data);
-    if(!bOk) return SHT21_DATA_NOTYET; // error
+	//	各軸の読み込み
+	switch( u8axis ){
+		case L3GD20_IDX_X:
+			bOk &= bGetAxis( L3GD20_IDX_X, au8data );
+			break;
+		case L3GD20_IDX_Y:
+			bOk &= bGetAxis( L3GD20_IDX_Y, au8data );
+			break;
+		case L3GD20_IDX_Z:
+			bOk &= bGetAxis( L3GD20_IDX_Z, au8data );
+			break;
+		default:
+			bOk = FALSE;
+	}
+	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.00875;		//	+-250dps( Degree per Second )
+//	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.0175;		//	+-500dps
+//	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.07;			//	+-2000dps
+
+	if (bOk == FALSE) {
+		i16result = SENSOR_TAG_DATA_ERROR;
+	}
 #ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT_DT %x %x %x", au8data[0], au8data[1], au8data[2]);
+vfPrintf(&sDebugStream, "\n\rL3GD20 DATA %x", *((uint16*)au8data) );
 #endif
 
-	// CRC8 check
-	au8data[3] = u8CCITT8(au8data, 2);
-	if (au8data[2] != au8data[3]) return SHT21_DATA_ERROR;
-
-    i32result = (au8data[1] & 0xfc) | (au8data[0] << 8);
-    if (au8data[1] & 0x02) {
-    	// bit1:1 --> humid
-		i32result = ((12500*i32result + 32768) >> 16) - 600;
-        if (pi16Temp) *pi16Humid = (int16)i32result;
-    } else {
-    	// bit1:0 --> temp
-        i32result = ((17572*i32result + 32768) >> 16) - 4685;
-        if (pi16Temp) *pi16Temp = (int16)i32result;
-    }
-#ifdef SERIAL_DEBUG
-//vfPrintf(&sDebugStream, "\n\rSHT21 CORRECT DATA %s=%d",
-//		(au8data[1] & 0x02) ? "HUMID" : "TEMP", i32result);
-#endif
-
-    return (int16)i32result;
+    return i16result;
 }
-
 
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-// the Main loop
-void vProcessSnsObj_SHT21(void *pvObj, teEvent eEvent) {
-	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
-	tsObjData_SHT21 *pObj = (tsObjData_SHT21 *)pSnsObj->pvData;
+PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
+{
+	uint8 i;
+	bool_t bOk = TRUE;
 
-	// general process
+	for( i=0; i<2; i++ ){
+		bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_AXIS[u8axis]+i, 0, NULL );
+		bOk &= bSMBusSequentialRead( L3GD20_ADDRESS, 1, &au8data[i] );
+	}
+//	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_AXIS[u8axis], 0, NULL );
+//	bOk &= bSMBusSequentialRead( L3GD20_ADDRESS, 2, au8data );
+
+	return bOk;
+}
+
+// the Main loop
+PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent) {
+	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
+	tsObjData_L3GD20 *pObj = (tsObjData_L3GD20 *)pSnsObj->pvData;
+
+	// general process (independent from each state)
 	switch (eEvent) {
 		case E_EVENT_TICK_TIMER:
 			if (pObj->u8TickCount < 100) {
@@ -234,10 +245,9 @@ vfPrintf(&sDebugStream, "+");
 		case E_EVENT_START_UP:
 			pObj->u8TickCount = 100; // expire immediately
 #ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
+vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
 #endif
-		break;
-
+			break;
 		default:
 			break;
 	}
@@ -252,18 +262,15 @@ vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
 	case E_SNSOBJ_STATE_IDLE:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			pObj->u8IdxMeasuruing = SHT21_IDX_BEGIN;
 			break;
 
 		case E_ORDER_KICK:
-			pObj->ai16Result[SHT21_IDX_TEMP] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[SHT21_IDX_HUMID] = SENSOR_TAG_DATA_ERROR;
-
 			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
 
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rSHT21 KICKED");
+			vfPrintf(&sDebugStream, "\n\rL3GD20 KICKED");
 			#endif
+
 			break;
 
 		default:
@@ -274,18 +281,22 @@ vfPrintf(&sDebugStream, "\n\rSHT21 WAKEUP");
 	case E_SNSOBJ_STATE_MEASURING:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-#ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
-#endif
+			pObj->ai16Result[L3GD20_IDX_X] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai16Result[L3GD20_IDX_Y] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai16Result[L3GD20_IDX_Z] = SENSOR_TAG_DATA_ERROR;
+			pObj->u8TickWait = L3GD20_CONVTIME;
 
-			pObj->ai16Result[pObj->u8IdxMeasuruing] = SENSOR_TAG_DATA_ERROR;
-			pObj->u8TickWait = au8TickWait[pObj->u8IdxMeasuruing];
-
-			// kick I2C communication
-			if (!bSHT21startRead(au8TrigCmd[pObj->u8IdxMeasuruing])) {
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE); // error
+			pObj->bBusy = TRUE;
+#ifdef L3GD20_ALWAYS_RESET
+			u8reset_flag = TRUE;
+			if (!bL3GD20reset()) {
+				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
-
+#else
+			if (!bL3GD20startRead()) { // kick I2C communication
+				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+			}
+#endif
 			pObj->u8TickCount = 0;
 			break;
 
@@ -295,44 +306,25 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 
 		// wait until completion
 		if (pObj->u8TickCount > pObj->u8TickWait) {
-			int16 i16ret;
-			i16ret = i16SHT21readResult(
-					&(pObj->ai16Result[SHT21_IDX_TEMP]),
-					&(pObj->ai16Result[SHT21_IDX_HUMID]) );
-
-			if (i16ret == SENSOR_TAG_DATA_ERROR) {
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE); // error
-			} else
-			if (i16ret == SENSOR_TAG_DATA_NOTYET) {
-				// still conversion
-				#ifdef SERIAL_DEBUG
-				vfPrintf(&sDebugStream, "\r\nSHT_ND");
-				#endif
-
-				pObj->u8TickCount /= 2; // wait more...
-			} else {
-				// data arrival
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURE_NEXT);
-			}
-		}
-		break;
-
-	case E_SNSOBJ_STATE_MEASURE_NEXT:
-		switch (eEvent) {
-			case E_EVENT_NEW_STATE:
-				pObj->u8IdxMeasuruing++;
-
-				if (pObj->u8IdxMeasuruing < SHT21_IDX_END) {
-					// complete all data
-					vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
-				} else {
-					// complete all data
-					vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+#ifdef L3GD20_ALWAYS_RESET
+			if (u8reset_flag) {
+				u8reset_flag = 0;
+				if (!bL3GD20startRead()) {
+					vL3GD20_new_state(pObj, E_SNSOBJ_STATE_COMPLETE);
 				}
-				break;
 
-			default:
+				pObj->u8TickCount = 0;
+				pObj->u8TickWait = L3GD20_CONVTIME;
 				break;
+			}
+#endif
+			pObj->ai16Result[L3GD20_IDX_X] = i16L3GD20readResult(L3GD20_IDX_X);
+			pObj->ai16Result[L3GD20_IDX_Y] = i16L3GD20readResult(L3GD20_IDX_Y);
+			pObj->ai16Result[L3GD20_IDX_Z] = i16L3GD20readResult(L3GD20_IDX_Z);
+
+			// data arrival
+			pObj->bBusy = FALSE;
+			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 		}
 		break;
 
@@ -340,9 +332,7 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rSHT_CP: T%d H%d",
-					pObj->ai16Result[SHT21_IDX_TEMP],
-					pObj->ai16Result[SHT21_IDX_HUMID]);
+			vfPrintf(&sDebugStream, "\n\rL3GD20_CP: %d", pObj->i16Result);
 			#endif
 
 			break;
@@ -361,7 +351,6 @@ vfPrintf(&sDebugStream, "\n\rSHT_ST:%d", pObj->u8IdxMeasuruing);
 		break;
 	}
 }
-
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

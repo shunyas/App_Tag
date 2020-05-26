@@ -119,6 +119,7 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			// Router として始動
 			sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ROUTER;
+			sAppData.sNwkLayerTreeConfig.u16TxMaxDelayUp_ms = 100;
 			sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig(&sAppData.sNwkLayerTreeConfig);
 			if (sAppData.pContextNwk) {
 				vfPrintf(&sSerStream, LB "* start router (layer %d)", sAppData.sFlash.sData.u8layer);
