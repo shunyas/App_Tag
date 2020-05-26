@@ -143,7 +143,7 @@ PUBLIC bool_t bSHT31startRead()
 PUBLIC int16 i16SHT31readResult(int16 *pi16Temp, int16 *pi16Humid)
 {
 	bool_t bOk = TRUE;
-    int16 i16result;
+    int32 i32result;
     uint16 u16result;
     uint8 au8data[6];
 
@@ -160,8 +160,8 @@ vfPrintf(&sDebugStream, "\n\rSHT_DT %x %x %x", au8data[0], au8data[1], au8data[2
 	u8crc = u8CRC8(au8data+3,2);
 	if (au8data[5] != u8crc) return SHT31_DATA_ERROR;
 
-    i16result = au8data[1] | (au8data[0] << 8);
-	if(pi16Temp) *pi16Temp = (int16)( (-45.0+175.0*i16result/65535.0)*100.0 );
+    i32result = au8data[1] | (au8data[0] << 8);
+	if(pi16Temp) *pi16Temp = (int16)( (-45.0+175.0*i32result/65535.0)*100.0 );
 	else return SHT31_DATA_ERROR;
 
     u16result = au8data[4] | (au8data[3] << 8);
@@ -173,7 +173,7 @@ vfPrintf(&sDebugStream, "\n\rSHT_DT %x %x %x", au8data[0], au8data[1], au8data[2
 //		(au8data[1] & 0x02) ? "HUMID" : "TEMP", i32result);
 #endif
 
-    return i16result;
+    return i32result;
 }
 
 uint8 u8CRC8( uint8* buf, uint8 u8len )

@@ -91,7 +91,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 		// スリープを行うが、WAKE_TIMER_0 は定周期スリープのためにカウントを続けているため
 		// 空いている WAKE_TIMER_1 を利用する
-		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 50, FALSE, FALSE); // PERIODIC RAM OFF SLEEP USING WK1
+		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 20, FALSE, FALSE); // PERIODIC RAM OFF SLEEP USING WK1
 	}
 
 	// 送信処理に移行

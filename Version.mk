@@ -6,8 +6,9 @@
 
 VERSION_MAIN = 2
 VERSION_SUB  = 1
-VERSION_VAR  = 4
+VERSION_VAR  = 5
 
+# 2.1.5 親機の出力形式にカンマ区切りを追加
 # 2.1.4 SHT3x/SHTC3の対応
 # 2.1.3 新ネットワーク方式に対応
 # 2.1.2 DIモードにて複数入力、定期送信に対応

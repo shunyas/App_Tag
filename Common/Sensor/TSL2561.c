@@ -37,14 +37,14 @@ extern tsFILE sDebugStream;
 #define TSL2561_DATA0        (0x0C)
 #define TSL2561_DATA1        (0x0E)
 
-#define TSL2561_CONVTIME    (24+2) // 24ms MAX
+#define TSL2561_CONVTIME    (15+2) // 15ms MAX
 
 #define CMD 0x80
 #define CREAR 0x40
 #define WORD 0x20
 #define BLOCK 0x10
 
-#define u32CalcLux(c) u32CalclateLux( GAIN_1X, INTG_13MS, c )
+#define u32CalcLux(c) u32CalclateLux( GAIN_16X, INTG_13MS, c )
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -54,7 +54,7 @@ extern tsFILE sDebugStream;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void vProcessSnsObj_TSL2561(void *pvObj, teEvent eEvent);
-PRIVATE uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data );
+PRIVATE uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint32* pu16Data );
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
@@ -75,7 +75,11 @@ void vTSL2561_Init(tsObjData_TSL2561 *pData, tsSnsObj *pSnsObj) {
 
 	memset((void*)pData, 0, sizeof(tsObjData_TSL2561));
 
-	uint8 opt = 0x03;
+	// INTEG 13ms
+	uint8 opt = (GAIN_16X<<4) | INTG_13MS;
+	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x01, 1, &opt );
+
+	opt = 0x03;
 	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x00, 1, &opt );
 }
 
@@ -141,31 +145,34 @@ PUBLIC uint32 u32TSL2561readResult( void )
 {
 	bool_t bOk = TRUE;
 	uint32 u32result = 0x00;
-	uint16 data[2];
-	uint8 au8data[2];
+	uint32 data[2];
+	//uint8 au8data[2];
+	uint8 u8Hi,u8Lo;
 	uint8 command;
-	uint32 Lux;
 
-	command = CMD | WORD | TSL2561_DATA0;
+	command = CMD | TSL2561_DATA0;
 	bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
-	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 2, au8data);
+	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 1, &u8Lo);
+
+	command = CMD | (TSL2561_DATA0+1);
+	bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
+	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 1, &u8Hi);
+	data[0] = (u8Hi<<8) | u8Lo;
+
+	command = CMD | TSL2561_DATA1;
+	bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
+	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 1, &u8Lo);
+
+	command = CMD | (TSL2561_DATA1+1);
+	bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
+	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 1, &u8Hi);
+	data[1] = (u8Hi<<8) | u8Lo;
+	
 	if (bOk == FALSE) {
 		u32result = (uint16)SENSOR_TAG_DATA_ERROR;
 	}else{
-		data[0] = ((au8data[1] << 8) | au8data[0]);	//	読み込んだ数値を代入
-
-		command = CMD | WORD | TSL2561_DATA1;
-		bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
-		bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 2, au8data);
-		if (bOk == FALSE) {
-			u32result = SENSOR_TAG_DATA_ERROR;
-		}
-		data[1] = ((au8data[1] << 8) | au8data[0]);	//	読み込んだ数値を代入
-
 		//	TSL2561FN 照度の計算
-		Lux = u32CalcLux(data);
-
-		u32result = Lux;
+		u32result = u32CalcLux(data);
 	}
 #ifdef SERIAL_DEBUG
 vfPrintf(&sDebugStream, "\n\rTSL2561 DATA %x", *((uint16*)au8data) );
@@ -194,24 +201,24 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 DATA %x", *((uint16*)au8data) );
 	Return: unsigned int − the approximate illuminance (lux)
 
 ****************************************************************************/
-uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data )
+uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint32* pu16Data )
 {
 	uint16 chScale;
 	uint32 channel0, channel1;
 
 	//	モデルを変えるときは下のコメントアウトを外す。
-	chScale = CHSCALE_TINT0;
-//	switch(u8Intg){
-//		case INTG_13MS:
-//			chScale = CHSCALE_TINT0;
-//			break;
-//		case INTG_101MS:
-//			chScale = CHSCALE_TINT1;
-//			break;
-//		default:
-//			chScale = (1 << CH_SCALE);
-//			break;
-//	}
+	//chScale = CHSCALE_TINT0;
+	switch(u8Intg){
+		case INTG_13MS:
+			chScale = CHSCALE_TINT0;
+			break;
+		case INTG_101MS:
+			chScale = CHSCALE_TINT1;
+			break;
+		default:
+			chScale = (1 << CH_SCALE);
+			break;
+	}
 
 	if (!u8Gain)
 		chScale = chScale << 4;		// scale 1X to 16X
@@ -261,10 +268,7 @@ uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data )
 
 	uint32	temp;
 	temp = ((channel0 * b) - (channel1 * m));
-	// do not allow negative lux value
-	//if (temp < 0){
-	//	temp = 0;
-	//}
+
 	// round lsb (2^(LUX_SCALE−1))
 	temp += (1 << (LUX_SCALE-1));
 	// strip off fractional portion
@@ -374,10 +378,15 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 	case E_SNSOBJ_STATE_COMPLETE:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rTSL2561_CP: %d", pObj->i16Result);
-			#endif
+			{
+				// POWEROFF
+				uint8 u8Com = 0x00;
+	 			bSMBusWrite(TSL2561_ADDRESS, CMD | 0x00, 1, &u8Com );
 
+				#ifdef SERIAL_DEBUG
+				vfPrintf(&sDebugStream, "\n\rTSL2561_CP: %d", pObj->i16Result);
+				#endif
+			}
 			break;
 
 		case E_ORDER_KICK:

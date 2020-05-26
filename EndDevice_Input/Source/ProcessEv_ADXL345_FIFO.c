@@ -36,6 +36,7 @@ enum {
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	static bool_t bFirst = TRUE;
+	static bool_t bOk = TRUE;
 	static bool_t bFIFO_Measuring = FALSE;
 	if (eEvent == E_EVENT_START_UP) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
@@ -60,11 +61,11 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_FIFO_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 FIFO Setting...");
-			bADXL345reset();
-			bADXL345_FIFO_Setting( (uint16)(sAppData.sFlash.sData.i16param&0xFFFF), sAppData.sFlash.sData.uParam.sADXL345Param );
+			bOk &= bADXL345reset();
+			bOk &= bADXL345_FIFO_Setting( (uint16)(sAppData.sFlash.sData.i16param&0xFFFF), sAppData.sFlash.sData.uParam.sADXL345Param );
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
-		if (bSnsObj_isComplete(&sSnsObj)) {
+		if (bSnsObj_isComplete(&sSnsObj) || !bOk ) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等
 			u8sns_cmplt |= E_SNS_ADXL345_CMP;
 			V_PRINTF(LB "*** ADXL345 comm err?");
@@ -207,31 +208,31 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 					ave[0] /= u16Sample;
 					ave[1] /= u16Sample;
 					ave[2] /= u16Sample;
-					V_PRINTF( LB"ave=%d", ave[0] );
 					V_PRINTF( LB"min=%d", min[0] );
+					V_PRINTF( LB"ave=%d", ave[0] );
 					V_PRINTF( LB"max=%d"LB, max[0] );
 
+					S_BE_WORD(min[0]);
 					S_BE_WORD(ave[0]);
-					S_BE_WORD(ave[1]);
-					S_BE_WORD(ave[2]);
+					S_BE_WORD(max[0]);
 					S_OCTET( 0xF9 );
 
 					S_BE_WORD(u16Sample);
 
-					S_BE_WORD(min[0]);
 					S_BE_WORD(min[1]);
-					S_BE_WORD(min[2]);
-
-					S_BE_WORD(max[0]);
+					S_BE_WORD(ave[1]);
 					S_BE_WORD(max[1]);
+
+					S_BE_WORD(min[2]);
+					S_BE_WORD(ave[2]);
 					S_BE_WORD(max[2]);
 
-					max[0] = -17000;
-					max[1] = -17000;
-					max[2] = -17000;
-					min[0] = 17000;
-					min[1] = 17000;
-					min[2] = 17000;
+					max[0] = -32768;
+					max[1] = -32768;
+					max[2] = -32768;
+					min[0] = 32767;
+					min[1] = 32767;
+					min[2] = 32767;
 					ave[0] = 0;
 					ave[1] = 0;
 					ave[2] = 0;

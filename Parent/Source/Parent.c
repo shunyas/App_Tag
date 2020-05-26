@@ -251,7 +251,7 @@ void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		sRxPktInfo.u8pkt = G_OCTET();
 
 		// 出力用の関数を呼び出す
-		if (IS_APPCONF_OPT_SmplTag()) {
+		if (IS_APPCONF_OPT_SmplTag() || IS_APPCONF_OPT_UART_CSV() ) {
 			vSerOutput_SmplTag3( sRxPktInfo, p);
 		} else if (IS_APPCONF_OPT_UART()) {
 			vSerOutput_Uart(sRxPktInfo, p);
@@ -1010,7 +1010,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16 i16z = G_BE_WORD();
 			uint8 u8bitmap = G_OCTET();
 
-			uint8 u8ActTapSource = ( u16adc1>>12 )|((u16adc2>>8)&0xF0);
+			uint8 u8ActTapSource = ( u16adc1>>12 )|((u16adc2>>8)&0xF0);(void)u8ActTapSource;
 
 			u16adc1 = u16adc1&0x0FFF;
 			u16adc2 = u16adc2&0x0FFF;
@@ -1020,16 +1020,16 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 					DECODE_VOLT(u8batt), u16adc1, u16adc2);
 
 			if( u8bitmap == 0xf9 ){
-				A_PRINTF( ":ax=%04d:ay=%04d:az=%04d", i16x, i16y, i16z );
+				A_PRINTF( ":xmin=%04d:xave=%04d:xmax=%04d", i16x, i16y, i16z );
 				uint16 u16Sample = G_BE_WORD();
 				i16x = G_BE_WORD();
 				i16y = G_BE_WORD();
 				i16z = G_BE_WORD();
-				A_PRINTF( ":mnx=%04d:mny=%04d:mnz=%04d", i16x, i16y, i16z );
+				A_PRINTF( ":ymin=%04d:yave=%04d:ymax=%04d", i16x, i16y, i16z );
 				i16x = G_BE_WORD();
 				i16y = G_BE_WORD();
 				i16z = G_BE_WORD();
-				A_PRINTF( ":mxx=%04d:mxy=%04d:mxz=%04d:sp=%d", i16x, i16y, i16z, u16Sample );
+				A_PRINTF( ":zmin=%04d:zave=%04d:zmax=%04d", i16x, i16y, i16z, u16Sample );
 			}else if(u8bitmap == 0xfa){
 				uint8 u8num = G_OCTET();
 				uint8 i;
@@ -1215,40 +1215,50 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 	}
 }
 
+#define SEPARATER() (IS_APPCONF_OPT_UART_CSV() ? ',' : ';')
+#define CONV_STR()  if(IS_APPCONF_OPT_UART_CSV()){\
+						A_PRINTF("\t");\
+					}
+
 /**
- * SimpleTag v3 互換 (SHT21 用) の出力
+ * 区切り文字を使用した出力(セミコロン区切り・カンマ区切り)
  */
-void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
+void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p){
 	if( sRxPktInfo.u8pkt == PKT_ID_MULTISENSOR ){
 		uint8 u8batt = G_OCTET();
 		uint16 u16adc1 = G_BE_WORD();
 		uint16 u16adc2 = G_BE_WORD();
 		uint8 u8SnsNum = G_OCTET();
+
 		// センサー情報
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// ADC1
-				"%04d;"			// ADC2
-				"%04d;"			// 立ち上がりモード
-				"%04d;"			// DIのビットマップ
-				"%c;",			// 押しボタンフラグ
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u16adc1,
-				u16adc2,
-				0,
-				0,
-				'W'
-				);
+		A_PRINTF( "%c%d%c", SEPARATER(), u32TickCount_ms/1000, SEPARATER() );
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",		// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"		// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// ADC1
+				"%04d%c"			// ADC2
+				"%04d%c"			// 立ち上がりモード
+				"%04d%c"			// DIのビットマップ
+				"%c%c",			// 押しボタンフラグ
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				0, SEPARATER(),
+				0, SEPARATER(),
+				'W', SEPARATER()
+		);
+
 		uint8 u8Sensor, i;
 		for( i=0; i<u8SnsNum; i++ ){
 			u8Sensor = G_OCTET();
@@ -1257,33 +1267,33 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				{
 					int16 i16temp = G_BE_WORD();
 					int16 i16humd = G_BE_WORD();
-					A_PRINTF("S;%04d;%04d;", i16temp, i16humd );
+					A_PRINTF("S%c%04d%c%04d%c", SEPARATER(), i16temp, SEPARATER(), i16humd, SEPARATER() );
 				}
 				break;
 				case PKT_ID_SHT31:
 				{
 					int16 i16temp = G_BE_WORD();
 					int16 i16humd = G_BE_WORD();
-					A_PRINTF("H;%04d;%04d;", i16temp, i16humd );
+					A_PRINTF("H%c%04d%c%04d%c", SEPARATER(), i16temp, SEPARATER(), i16humd, SEPARATER() );
 				}
 				break;
 				case PKT_ID_SHTC3:
 				{
 					int16 i16temp = G_BE_WORD();
 					int16 i16humd = G_BE_WORD();
-					A_PRINTF("Y;%04d;%04d;", i16temp, i16humd );
+					A_PRINTF("H%c%04d%c%04d%c", SEPARATER(), i16temp, SEPARATER(), i16humd, SEPARATER() );
 				}
 				break;
 				case PKT_ID_ADT7410:
 				{
 					int16 i16temp = G_BE_WORD();
-					A_PRINTF("A;%04d;", i16temp );
+					A_PRINTF("A%c%04d%c", SEPARATER(), i16temp, SEPARATER() );
 				}
 				break;
 				case PKT_ID_MPL115A2:
 				{
 					int16 i16atmo = G_BE_WORD();
-					A_PRINTF("M;%04d;", i16atmo );
+					A_PRINTF("M%c%04d%c", SEPARATER(), i16atmo, SEPARATER() );
 				}
 				break;
 				case PKT_ID_LIS3DH:
@@ -1291,13 +1301,16 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 					int16 i16x = G_BE_WORD();
 					int16 i16y = G_BE_WORD();
 					int16 i16z = G_BE_WORD();
-					A_PRINTF("I;%04d;%04d;%04d;", i16x, i16y, i16z );
+					A_PRINTF("I%c%04d%c%04d%c%04d%c", SEPARATER(), i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 				}
 				break;
 				case PKT_ID_ADXL345:
 				{
 					uint8 u8mode = G_OCTET();
-					A_PRINTF("X;%02X;", u8mode );
+					A_PRINTF( "X%c", SEPARATER() );
+
+					CONV_STR();
+					A_PRINTF( "%02X%c", u8mode, SEPARATER() );
 					int16 i16x, i16y, i16z;
 					if( u8mode == 0xfa ){
 						uint8 u8num = G_OCTET();
@@ -1306,28 +1319,28 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 							i16x = G_BE_WORD();
 							i16y = G_BE_WORD();
 							i16z = G_BE_WORD();
-							A_PRINTF("%04d;%04d;%04d;", i16x, i16y, i16z );
+							A_PRINTF("%04d%c%04d%c%04d%c", i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 						}
 					}else{
 						i16x = G_BE_WORD();
 						i16y = G_BE_WORD();
 						i16z = G_BE_WORD();
-						A_PRINTF("%04d;%04d;%04d;", i16x, i16y, i16z );
+						A_PRINTF("%04d%c%04d%c%04d%c", i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 					}
 				}
-					break;
+				break;
 				case PKT_ID_L3GD20:
 				{
 					int16 i16x = G_BE_WORD();
 					int16 i16y = G_BE_WORD();
 					int16 i16z = G_BE_WORD();
-					A_PRINTF("G;%04d;%04d;%04d;", i16x, i16y, i16z );
+					A_PRINTF("G%c%04d%c%04d%c%04d%c", SEPARATER(), i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 				}
 				break;
 				case PKT_ID_TSL2561:
 				{
 					uint32	u32lux = G_BE_DWORD();
-					A_PRINTF("T;%04d;", u32lux );
+					A_PRINTF("T%c%04d%c", SEPARATER(), u32lux, SEPARATER() );
 				}
 				break;
 				case PKT_ID_S1105902:
@@ -1336,7 +1349,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 					int16 u16G = G_BE_WORD();
 					int16 u16B = G_BE_WORD();
 					int16 u16I = G_BE_WORD();
-					A_PRINTF("C;%04d;%04d;%04d;%04d;", u16R, u16G, u16B, u16I );
+					A_PRINTF("C%c%04d%c%04d%c%04d%c%04d%c", SEPARATER(), u16R, SEPARATER(), u16G, SEPARATER(), u16B, SEPARATER(), u16I, SEPARATER() );
 				}
 				break;
 				case PKT_ID_BME280:
@@ -1344,7 +1357,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 					int16	i16temp = G_BE_WORD();
 					uint16	u16hum = G_BE_WORD();
 					uint16	u16atmo = G_BE_WORD();
-					A_PRINTF("B;%04d;%04d;%04d:", i16temp, u16hum, u16atmo);
+					A_PRINTF("B%c%04d%c%04d%c%04d%c", SEPARATER(), i16temp, SEPARATER(), u16hum, SEPARATER(), u16atmo, SEPARATER() );
 				}
 				break;
 				default:
@@ -1387,32 +1400,39 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 			}
 		}
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// ADC1
-				"%04d;"			// ADC2
-				"%04d;"			// 立ち上がりモード
-				"%04d;"			// DIのビットマップ
-				"%c;"			// 押しボタンフラグ
-				"%04d;"			// ボタンの状態(LEDが光れば1、消えれば0)
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000,  SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// ADC1
+				"%04d%c"			// ADC2
+				"%04d%c"			// 立ち上がりモード
+				"%04d%c"			// DIのビットマップ
+				"%c%c"				// 押しボタンフラグ
+				"%04d%c"			// ボタンの状態(LEDが光れば1、消えれば0)
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u16adc1,
-				u16adc2,
-				u8mode,
-				u8Bitmap,
-				'P',
-				sAppData.u8DO_State
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				u8mode, SEPARATER(),
+				u8Bitmap, SEPARATER(),
+				'P', SEPARATER(),
+				sAppData.u8DO_State, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1436,30 +1456,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16temp = G_BE_WORD();
 		int16 i16humd = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			// SHT21 HUMID
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16temp,
-				i16humd,
-				u16adc1,
-				u16adc2,
-				'S'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16temp, SEPARATER(),
+				i16humd, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'S', SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1483,30 +1510,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16temp = G_BE_WORD();
 		int16 i16humd = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			// SHT21 HUMID
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16temp,
-				i16humd,
-				u16adc1,
-				u16adc2,
-				'H'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16temp, SEPARATER(),
+				i16humd, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'H', SEPARATER()
 		);
 	}
 
@@ -1517,44 +1551,38 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16temp = G_BE_WORD();
 		int16 i16humd = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			// SHT21 HUMID
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
-				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16temp,
-				i16humd,
-				u16adc1,
-				u16adc2,
-				'Y'
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
 		);
 
-#ifdef USE_LCD
-		// LCD への出力
-		V_PRINTF_LCD("%03d:%08X:%03d:%02X:S:%04d:%04d\n",
-				u32sec % 1000,
-				sRxPktInfo.u32addr_1st,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct & 0xFF,
-				i16temp,
-				i16humd
-				);
-		vLcdRefresh();
-#endif
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
+				LB,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16temp, SEPARATER(),
+				i16humd, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'Y', SEPARATER()
+		);
 	}
 
 	if (sRxPktInfo.u8pkt == PKT_ID_MAX31855) {
@@ -1564,30 +1592,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int32 i32temp = G_BE_DWORD();
 		int32 i32itemp = G_BE_DWORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			// SHT21 HUMID
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i32temp,
-				i32itemp,
-				u16adc1,
-				u16adc2,
-				'N'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i32temp, SEPARATER(),
+				i32itemp, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'N', SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1613,38 +1648,45 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16B = G_BE_WORD();
 		uint16 u16I = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			// SHT21 HUMID
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
-				"%04d;"			// Red
-				"%04d;"			// Green
-				"%04d;"			// Blue
-				"%04d;"			// Infrared
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"				// パケット識別子
+				"%04d%c"			// Red
+				"%04d%c"			// Green
+				"%04d%c"			// Blue
+				"%04d%c"			// Infrared
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				0,
-				0,
-				u16adc1,
-				u16adc2,
-				'C',
-				u16R,
-				u16G,
-				u16B,
-				u16I
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				0, SEPARATER(),
+				0, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'C', SEPARATER(),
+				u16R, SEPARATER(),
+				u16G, SEPARATER(),
+				u16B, SEPARATER(),
+				u16I, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1670,36 +1712,47 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16z = G_BE_WORD();
 		uint8 u8bitmap = G_OCTET();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04x;"			//
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%0c;"			// パケット識別子
-				"%04d;"			// x
-				"%04d;"			// y
-				"%04d;"			// z
-				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u8bitmap,
-				0,
-				u16adc1,
-				u16adc2,
-				'I',
-				i16x,
-				i16y,
-				i16z
+		A_PRINTF("%c%d%c", SEPARATER(), u32TickCount_ms / 1000, SEPARATER() );
+
+		CONV_STR();
+		A_PRINTF(
+			"%08X%c"			// 受信機のアドレス
+			"%03d%c"			// LQI  (0-255)
+			"%03d%c"			// 連番
+			,
+			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+			sRxPktInfo.u8lqi_1st, SEPARATER(),
+			sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF(
+			"%07X%c"			// シリアル番号
+			"%04d%c"			// 電源電圧 (0-3600, mV)
+			,
+			sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+			DECODE_VOLT(u8batt), SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF(
+			"%04X%c"			// モード
+			"%04X%c"			//
+			"%04d%c"			// adc1
+			"%04d%c"			// adc2
+			"%c%c"				// パケット識別子
+			"%04d%c"			// x
+			"%04d%c"			// y
+			"%04d%c"			// z
+			LB,
+			u8bitmap, SEPARATER(),
+			0, SEPARATER(),
+			u16adc1, SEPARATER(),
+			u16adc2, SEPARATER(),
+			'I', SEPARATER(),
+			i16x, SEPARATER(),
+			i16y, SEPARATER(),
+			i16z, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1726,36 +1779,47 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		int16 i16z = G_BE_WORD();
 		uint8 u8bitmap = G_OCTET();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04x;"			//
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%0c;"			// パケット識別子
-				"%04d;"			// x
-				"%04d;"			// y
-				"%04d;"			// z
-				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u8bitmap,
-				0,
-				u16adc1,
-				u16adc2,
-				'G',
-				i16x,
-				i16y,
-				i16z
+		A_PRINTF("%c%d%c", SEPARATER(), u32TickCount_ms / 1000, SEPARATER() );
+
+		CONV_STR();
+		A_PRINTF(
+			"%08X%c"			// 受信機のアドレス
+			"%03d%c"			// LQI  (0-255)
+			"%03d%c"			// 連番
+			,
+			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+			sRxPktInfo.u8lqi_1st, SEPARATER(),
+			sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF(
+			"%07X%c"			// シリアル番号
+			"%04d%c"			// 電源電圧 (0-3600, mV)
+			,
+			sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+			DECODE_VOLT(u8batt), SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF(
+			"%04X%c"			// モード
+			"%04X%c"			//
+			"%04d%c"			// adc1
+			"%04d%c"			// adc2
+			"%c%c"				// パケット識別子
+			"%04d%c"			// x
+			"%04d%c"			// y
+			"%04d%c"			// z
+			LB,
+			u8bitmap, SEPARATER(),
+			0, SEPARATER(),
+			u16adc1, SEPARATER(),
+			u16adc2, SEPARATER(),
+			'G', SEPARATER(),
+			i16x, SEPARATER(),
+			i16y, SEPARATER(),
+			i16z, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1789,42 +1853,54 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		u16adc2 = u16adc2&0x0FFF;
 
 		if( u8mode == 0xFA ){
-			A_PRINTF( ";%d.%02d;", u32TickCount_ms / 1000, (u32TickCount_ms % 1000)/10 );
+			A_PRINTF( "%c%d.%02d%c", SEPARATER(), u32TickCount_ms / 1000, (u32TickCount_ms % 1000)/10, SEPARATER() );
 		}else{
-			A_PRINTF(";%d;", u32TickCount_ms / 1000 );
+			A_PRINTF("%c%d%c", SEPARATER(), u32TickCount_ms / 1000, SEPARATER() );
 		}
 
+		CONV_STR();
 		A_PRINTF(
-			"%08X;"			// 受信機のアドレス
-			"%03d;"			// LQI  (0-255)
-			"%03d;"			// 連番
-			"%07x;"			// シリアル番号
-			"%04d;"			// 電源電圧 (0-3600, mV)
-			"%04x;"			// モード
-			"%04X;"			//
-			"%04d;"			// adc1
-			"%04d;"			// adc2
-			"%0c;"			// パケット識別子
-			"%04d;"			// x
-			"%04d;"			// y
-			"%04d;"			// z
+			"%08X%c"			// 受信機のアドレス
+			"%03d%c"			// LQI  (0-255)
+			"%03d%c"			// 連番
 			,
-			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-			sRxPktInfo.u8lqi_1st,
-			sRxPktInfo.u16fct,
-			sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-			DECODE_VOLT(u8batt),
-			u8mode,
-			u8ActTapSource,
-			u16adc1,
-			u16adc2,
-			'X',
-			i16x,
-			i16y,
-			i16z
+			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+			sRxPktInfo.u8lqi_1st, SEPARATER(),
+			sRxPktInfo.u16fct, SEPARATER()
 		);
 
-		//uint32 u32CkSum = i16x+i16y+i16z;
+		CONV_STR();
+		A_PRINTF(
+			"%07X%c"			// シリアル番号
+			"%04d%c"			// 電源電圧 (0-3600, mV)
+			,
+			sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+			DECODE_VOLT(u8batt), SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%04X%c",			// モード
+				u8mode, SEPARATER()
+    	);
+
+		CONV_STR();
+		A_PRINTF(
+			"%04X%c"			//
+			"%04d%c"			// adc1
+			"%04d%c"			// adc2
+			"%c%c"				// パケット識別子
+			"%04d%c"			// x
+			"%04d%c"			// y
+			"%04d%c"			// z
+			,
+			u8ActTapSource, SEPARATER(),
+			u16adc1, SEPARATER(),
+			u16adc2, SEPARATER(),
+			'X', SEPARATER(),
+			i16x, SEPARATER(),
+			i16y, SEPARATER(),
+			i16z, SEPARATER()
+		);
 
 		if(u8mode == 0xFA){
 			A_PRINTF( LB );
@@ -1834,18 +1910,18 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				i16x = G_BE_WORD();
 				i16y = G_BE_WORD();
 				i16z = G_BE_WORD();
-				A_PRINTF( ";;;;;;;;;;;;%04d;%04d;%04d;"LB, i16x, i16y, i16z );
+				A_PRINTF( "%c%c%c%c%c%c%c%c%c%c%c%c%04d%c%04d%c%04d%c"LB, SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), SEPARATER(), i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 			}
 		}else if(u8mode == 0xF9){
 			uint16 u16Sample = G_BE_WORD();
 			i16x = G_BE_WORD();
 			i16y = G_BE_WORD();
 			i16z = G_BE_WORD();
-			A_PRINTF( "%04d;%04d;%04d;", i16x, i16y, i16z );
+			A_PRINTF( "%04d%c%04d%c%04d%c", i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER() );
 			i16x = G_BE_WORD();
 			i16y = G_BE_WORD();
 			i16z = G_BE_WORD();
-			A_PRINTF( "%04d;%04d;%04d;%04d"LB, i16x, i16y, i16z, u16Sample );
+			A_PRINTF( "%04d%c%04d%c%04d%c%d%c"LB, i16x, SEPARATER(), i16y, SEPARATER(), i16z, SEPARATER(), u16Sample, SEPARATER() );
 
 		}else{
 			A_PRINTF( LB );
@@ -1873,30 +1949,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16adc2 = G_BE_WORD(); (void)u16adc2;
 		int16 i16temp = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// TEMP
+				"%04d%c"			// 
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16temp,
-				0,
-				u16adc1,
-				u16adc2,
-				'D'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16temp, SEPARATER(),
+				0, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'D', SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1919,30 +2002,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16adc2 = G_BE_WORD(); (void)u16adc2;
 		uint32 u32lux = G_BE_DWORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// SHT21 TEMP
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// lux
+				"%04d%c"			// 
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u32lux,
-				0,
-				u16adc1,
-				u16adc2,
-				'T'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				u32lux, SEPARATER(),
+				0, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'T', SEPARATER()
 		);
 	}
 
@@ -1952,30 +2042,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16adc2 = G_BE_WORD();;
 		int16 i16atmo = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// ATMOSPHERIC
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// SHT21 TEMP
+				"%04d%c"			// SHT21 HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16atmo,
-				0,
-				u16adc1,
-				u16adc2,
-				'M'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16atmo, SEPARATER(),
+				0, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'M', SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -1999,32 +2096,39 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16hum = G_BE_WORD();
 		uint16 u16atmo = G_BE_WORD();
 
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// 気温
-				"%04d;"			// 湿度
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%c;"			// パケット識別子
-				"%04d;"			// 気圧
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// TEMP
+				"%04d%c"			// HUMID
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"				// パケット識別子
+				"%04d%c"			// atomo
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				i16temp,
-				u16hum,
-				u16adc1,
-				u16adc2,
-				'B',
-				u16atmo
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				i16temp, SEPARATER(),
+				u16hum, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'B', SEPARATER(),
+				u16atmo, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -2051,49 +2155,55 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16pc1 = G_BE_WORD(); (void)u16pc1;
 		uint16 u16pc2 = G_BE_WORD(); (void)u16pc2;
 
-		// センサー情報
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;",// 電源電圧 (0-3600, mV)
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt)
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
 		);
 
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER()
+		);
+
+
 		if(u16adc1&0x8000){
-			A_PRINTF(
-					"%04d;"			// LM61温度(100x ℃)
-					"%04d;"			// SuperCAP 電圧(mV)
-					"%04d;"			// ADC1
-					"%04d;"			// ADC2
-					"%c;"			// 識別子
-					LB,
-					u16adc1&0x7FFF,
-					u16adc2, // 3300mV で 99% 相当
-					u16pc1,
-					u16pc2,
-					'A'
+			A_PRINTF( "%04d%c"		// AI1
+				"%04d%c"			// AI2
+				"%04d%c"			// AI3
+				"%04d%c"			// AI4
+				"%c%c"			// パケット識別子
+				LB,
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				u16pc1, SEPARATER(),
+				u16pc2, SEPARATER(),
+				'A', SEPARATER()
 			);
 		}else{
-			A_PRINTF(
-					"%04d;"			// LM61温度(100x ℃)
-					"%04d;"			// SuperCAP 電圧(mV)
-					"%04d;"			// ADC1
-					"%04d;"			// ADC2
-					"%c;"			// 識別子
-					LB,
-					u16adc2,
-					u16adc1 * 2 * 3, // 3300mV で 99% 相当
-					u16adc1,
-					u16adc2,
-					'A'
+			A_PRINTF( "%04d%c"			// ADC2
+				"%04d%c"			// SuperCAP 電圧(mV)
+				"%04d%c"			// adc1
+				"%04d%c"			// adc2
+				"%c%c"			// パケット識別子
+				LB,
+				u16adc2, SEPARATER(),
+				u16adc1*2*3, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'A', SEPARATER()
 			);
 		}
 
@@ -2126,31 +2236,37 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		//   100xT = 10xVo-6000
 		int32 iTemp = 10 * (int32)u16adc2 - 6000L + bias;
 
-		// センサー情報
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// LM61温度(100x ℃)
-				"%04d;"			// SuperCAP 電圧(mV)
-				"%04d;"			// もともとの電圧
-				"%04d;"			// バイアスをかけた電圧
-				"%c;"			// 識別子
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%04d%c"			// 電源電圧 (0-3600, mV)
+				"%04d%c"			// LM61温度
+				"%04d%c"			// SuperCap の蓄電率
+				"%04d%c"			// もともとの電圧
+				"%04d%c"			// バイアスをかけた電圧
+				"%c%c"			// パケット識別子
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				iTemp,
-				u16adc1 * 2 * 3, // 3300mV で 99% 相当
-				u16adc1,
-				u16adc2,
-				'L'
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				DECODE_VOLT(u8batt), SEPARATER(),
+				iTemp, SEPARATER(),
+				u16adc1*2*3, SEPARATER(),
+				u16adc1, SEPARATER(),
+				u16adc2, SEPARATER(),
+				'L', SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -2171,35 +2287,41 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint8 u8stat = G_OCTET();
 		uint32 u32dur = G_BE_DWORD();
 
-		// センサー情報
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%s;"			// 取りえない値
-				"%s;"			//
-				"%s;"			//
-				"%s;"			//
-				"%s;"			//
-				"%c;"			// ドアフラグ
-				"%04d;"			// OPEN=1, CLOSE=0
-				"%04d;"			// 開いている時間(開いていた時間)
+		A_PRINTF( "%c"
+				"%d%c",			// TIME STAMP
+				SEPARATER(),
+				u32TickCount_ms / 1000, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%08X%c"			// 受信機のアドレス
+				"%03d%c"			// LQI  (0-255)
+				"%03d%c",			// 連番
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF, SEPARATER(),
+				sRxPktInfo.u8lqi_1st, SEPARATER(),
+				sRxPktInfo.u16fct, SEPARATER()
+		);
+
+		CONV_STR();
+		A_PRINTF( "%07x%c"			// シリアル番号
+				"%s%c"			// 電源電圧 (0-3600, mV)
+				"%s%c"			// SHT21 TEMP
+				"%s%c"			// SHT21 HUMID
+				"%s%c"			// adc1
+				"%s%c"			// adc2
+				"%c%c"			// パケット識別子
+				"%04d%c"
+				"%04d%c"
 				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				"",
-				"",
-				"",
-				"",
-				"",
-				'B',
-				u8stat,
-				u32dur / 1000
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF, SEPARATER(),
+				"", SEPARATER(),
+				"", SEPARATER(),
+				"", SEPARATER(),
+				"", SEPARATER(),
+				"", SEPARATER(),
+				'B', SEPARATER(),
+				u8stat, SEPARATER(),
+				u32dur, SEPARATER()
 		);
 
 #ifdef USE_LCD
@@ -2383,21 +2505,21 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 					}
 				}else if(u8mode == 0xF9 ){
 					uint16 u16Sample = G_BE_WORD();
-					S_BE_WORD(i16x);		//	average
-					S_BE_WORD(i16y);		//
-					S_BE_WORD(i16z);		//
+					S_BE_WORD(i16x);		//	X min
+					S_BE_WORD(i16y);		//	X ave
+					S_BE_WORD(i16z);		//	X max
 					i16x = G_BE_WORD();
 					i16y = G_BE_WORD();
 					i16z = G_BE_WORD();
-					S_BE_WORD(i16x);		//	minimum
-					S_BE_WORD(i16y);		//
-					S_BE_WORD(i16z);		//
+					S_BE_WORD(i16x);		//	Y min
+					S_BE_WORD(i16y);		//	Y ave
+					S_BE_WORD(i16z);		//	Y max
 					i16x = G_BE_WORD();
 					i16y = G_BE_WORD();
 					i16z = G_BE_WORD();
-					S_BE_WORD(i16x);		//	maximum
-					S_BE_WORD(i16y);		//
-					S_BE_WORD(i16z);		//
+					S_BE_WORD(i16x);		//	Z min
+					S_BE_WORD(i16y);		//	Z ave
+					S_BE_WORD(i16z);		//	Z max
 					S_BE_WORD(u16Sample);	// 今回使用したサンプル数
 				}else{
 					S_BE_WORD(i16x);		//	Result
@@ -2647,6 +2769,8 @@ void vSerOutput_Secondary() {
 		// 出力用の関数を呼び出す
 		if (IS_APPCONF_OPT_SmplTag()) {
 			A_PRINTF(";%d;"LB, u32sec);
+		} else if(IS_APPCONF_OPT_UART_CSV()){
+			A_PRINTF(",%d,"LB, u32sec);
 		} else if (IS_APPCONF_OPT_UART()) {
 			// 無し
 		} else {

@@ -10,11 +10,14 @@
 extern "C" {
 #endif
 
+#ifndef ENDDEVICE_INPUT
+#define ENDDEVICE_INPUT
+#endif
+
 /****************************************************************************/
 /***        Include Files                                                 ***/
 /****************************************************************************/
 #include <jendefs.h>
-
 
 /// TOCONET 関連の定義
 #define TOCONET_DEBUG_LEVEL 0

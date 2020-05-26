@@ -195,6 +195,7 @@ enum {
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	static bool_t bFirst = TRUE;
+	static bool_t bOk = TRUE;
 	if (eEvent == E_EVENT_START_UP) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -223,9 +224,9 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_AirVolume_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 AirVolume Setting...");
-			bFirst = FALSE;
-			bADXL345reset();
-			bADXL345_AirVolume_Setting();
+			bOk &= bADXL345reset();
+			bOk &= bADXL345_AirVolume_Setting();
+			if(bOk) bFirst = FALSE;
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {

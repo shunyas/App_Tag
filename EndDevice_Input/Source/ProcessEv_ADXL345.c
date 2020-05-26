@@ -134,6 +134,7 @@ enum {
  * ADC 計測をしてデータ送信するアプリケーション制御
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	static bool_t bOk = TRUE;
 	if (eEvent == E_EVENT_START_UP) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -157,8 +158,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
-			bADXL345reset();
-			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.uParam.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
+			bOk &= bADXL345reset();
+			bOk &= bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.uParam.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
 			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap != 0 ){
 				au16ThTable[0] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap;
 			}
@@ -175,7 +176,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		}
 
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
-		if (bSnsObj_isComplete(&sSnsObj)) {
+		if ( bSnsObj_isComplete(&sSnsObj) || !bOk ) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等
 			u8sns_cmplt |= E_SNS_ADXL345_CMP;
 			V_PRINTF(LB "*** ADXL345 comm err?");
@@ -1095,5 +1096,6 @@ void vRead_Register( void )
 
 	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 0, NULL );
 	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
-	V_PRINTF( LB"TAX = %02X", u8source, u8source );
+	V_PRINTF( LB"TAX = %02X", u8source );
+	V_FLUSH();
 }

@@ -49,6 +49,12 @@
 #define IS_APPCONF_OPT_SmplTag() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_SmplTag) != 0) //!< E_APPCONF_OPT_SHT21 判定
 
 /**
+ * 親機のUART出力形式をCSV(カンマ区切り)にする
+ */
+#define E_APPCONF_OPT_UART_CSV 0x00000040UL
+#define IS_APPCONF_OPT_UART_CSV() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_UART_CSV) != 0) //!< E_APPCONF_OPT_WAKE_RANDOM 判定
+
+/**
  * 起床時間を±12%の範囲でランダムにする
  */
 #define E_APPCONF_OPT_WAKE_RANDOM 0x00000040UL
