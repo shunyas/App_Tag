@@ -17,8 +17,8 @@
  *
  ****************************************************************************/
 
-#ifndef  BH1715_INCLUDED
-#define  BH1715_INCLUDED
+#ifndef  BME280_INCLUDED
+#define  BME280_INCLUDED
 
 #if defined __cplusplus
 extern "C" {
@@ -27,49 +27,56 @@ extern "C" {
 /****************************************************************************/
 /***        Include Files                                                 ***/
 /****************************************************************************/
-#include "sensor_driver.h"
+#include "appsave.h"
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+#define BME280_IDX_X 0
+#define BME280_IDX_Y 1
+#define BME280_IDX_Z 2
 
+#define BME280_IDX_BEGIN 0
+#define BME280_IDX_END (BME280_IDX_Z+1) // should be (last idx + 1)
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
 typedef struct {
 	// protected
-	bool_t bBusy;          // should block going into sleep
+	bool_t	bBusy;			// should block going into sleep
 
-	// public
-	int16 i16Result;
+	// data
+	int16	i16Temp;
+	uint16	u16Hum;
+	uint16	u16Pres;
 
-	// private
-	uint8 u8TickCount, u8TickWait;
-} tsObjData_BH1715;
+	// working
+	uint8	u8TickCount, u8TickWait;
+} tsObjData_BME280;
 
 /****************************************************************************/
 /***        Exported Functions (state machine)                            ***/
 /****************************************************************************/
-void vBH1715_Init(tsObjData_BH1715 *pData, tsSnsObj *pSnsObj);
-void vBH1715_Final(tsObjData_BH1715 *pData, tsSnsObj *pSnsObj);
-
 
 /****************************************************************************/
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
-PUBLIC bool_t bBH1715reset();
-PUBLIC bool_t bBH1715startRead();
-PUBLIC int16 i16BH1715readResult();
+void vBME280_Init(tsObjData_BME280 *pData, tsSnsObj *pSnsObj );
+bool_t bBME280_Setting();
+void vBME280_Final(tsObjData_BME280 *pData, tsSnsObj *pSnsObj);
+
+PUBLIC bool_t bBME280Reset();
+PUBLIC bool_t bBME280StartRead();
+PUBLIC int16 i16BME280ReadResult( int16* Temp, uint16* Pres, uint16* Hum );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
-
 #if defined __cplusplus
 }
 #endif
 
-#endif  /* BH1715_INCLUDED */
+#endif  /* BME280_INCLUDED */
 
 /****************************************************************************/
 /***        END OF FILE                                                   ***/

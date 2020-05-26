@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -51,9 +51,11 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_TSL2561 0x36
 #define PKT_ID_L3GD20 0x37
 #define PKT_ID_S1105902 0x38
+#define PKT_ID_BME280 0x39
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
 #define PKT_ID_ADXL345_LOWENERGY 0xA1
+//#define PKT_ID_ADXL345_AIRVOLUME 0xA2
 #define PKT_ID_BUTTON 0xFE
 
 /*
@@ -100,15 +102,16 @@ extern const uint8 au8EncKey[];
 #elif defined(JN514x)
 #ifdef TWX0003
 #warning "IO CONF IS FOR TWX-0003!"
-
 #define PORT_OUT1 0 // TWX-0003 のリセット制御ピン
 #define PORT_OUT2 PORT_KIT_LED2
 #define PORT_OUT3 PORT_KIT_LED1
+#define PORT_OUT4 PORT_KIT_LED4
 #define PORT_INPUT1 8 // TWX-0003 のボタン
 #define PORT_INPUT2 5
 #define PORT_INPUT3 PORT_KIT_SW2
 #define PORT_INPUT4 PORT_KIT_SW3
 #define PORT_UART0_RX 7
+#define PORT_BAUD 12
 #define PORT_CONF2 PORT_KIT_SW1
 #else
 #define PORT_OUT1 PORT_KIT_LED1

@@ -27,19 +27,21 @@
 #include "EndDevice_Input.h"
 
 #include "sensor_driver.h"
-#include "ADXL345_LowEnergy.h"
+#include "BME280.h"
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
-static void vProcessADXL345_LowEnergy(teEvent eEvent);
+static void vProcessBME280(teEvent eEvent);
 static uint8 u8sns_cmplt = 0;
 
 static tsSnsObj sSnsObj;
-static tsObjData_ADXL345 sObjADXL345;
+static tsObjData_BME280 sObjBME280;
+
+static bool_t bCold = TRUE;
 
 enum {
 	E_SNS_ADC_CMP_MASK = 1,
-	E_SNS_ADXL345_CMP = 2,
+	E_SNS_BME280_CMP = 2,
 	E_SNS_ALL_CMP = 3
 };
 
@@ -52,6 +54,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
 			V_PRINTF(LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
+
+			bCold = FALSE;
 		} else {
 			// 開始する
 			// start up message
@@ -59,7 +63,8 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			V_PRINTF(LB "*** Cold starting");
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
-			// ADXL345 の初期化
+
+			bCold = TRUE;
 		}
 
 		// RC クロックのキャリブレーションを行う
@@ -68,21 +73,21 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// センサーがらみの変数の初期化
 		u8sns_cmplt = 0;
 
-		vADXL345_LowEnergy_Init( &sObjADXL345, &sSnsObj );
+		vBME280_Init( &sObjBME280, &sSnsObj );
 		if( bFirst ){
-			V_PRINTF(LB "*** ADXL345 Setting...");
+			V_PRINTF(LB "*** BME280 Setting...");
 			bFirst = FALSE;
-			bADXL345_LowEnergy_Setting();
+			// BME280 の初期化
+			bBME280_Setting();
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等
-			u8sns_cmplt |= E_SNS_ADXL345_CMP;
-			V_PRINTF(LB "*** ADXL345 comm err?");
+			u8sns_cmplt |= E_SNS_BME280_CMP;
+			V_PRINTF(LB "*** BME280 comm err?");
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 			return;
 		}
-
 
 		// ADC の取得
 		vADC_WaitInit();
@@ -100,7 +105,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		// 短期間スリープからの起床をしたので、センサーの値をとる
 	if ((eEvent == E_EVENT_START_UP) && (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK)) {
 		V_PRINTF("#");
-		vProcessADXL345_LowEnergy(E_EVENT_START_UP);
+		vProcessBME280(E_EVENT_START_UP);
 	}
 
 	// 送信処理に移行
@@ -117,37 +122,45 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
-		// ネットワークの初期化
-		if (!sAppData.pContextNwk) {
-			// 初回のみ
-			sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ENDDEVICE;
-			sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig_MiniNodes(&sAppData.sNwkLayerTreeConfig);
-			if (sAppData.pContextNwk) {
-				ToCoNet_Nwk_bInit(sAppData.pContextNwk);
-				ToCoNet_Nwk_bStart(sAppData.pContextNwk);
+		//	初回起動はセンサの値がおかしいので送信しない
+		if ( !bCold ) {
+			// ネットワークの初期化
+			if (!sAppData.pContextNwk) {
+				// 初回のみ
+				sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ENDDEVICE;
+				sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig_MiniNodes(&sAppData.sNwkLayerTreeConfig);
+				if (sAppData.pContextNwk) {
+					ToCoNet_Nwk_bInit(sAppData.pContextNwk);
+					ToCoNet_Nwk_bStart(sAppData.pContextNwk);
+				} else {
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+					return;
+				}
 			} else {
-				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
-				return;
+				// 一度初期化したら RESUME
+				ToCoNet_Nwk_bResume(sAppData.pContextNwk);
+			}
+
+			// Warm start
+			uint8	au8Data[12];
+			uint8*	q = au8Data;
+			S_OCTET(sAppData.sSns.u8Batt);
+			S_BE_WORD(sAppData.sSns.u16Adc1);
+			S_BE_WORD(sAppData.sSns.u16Adc2);
+			S_BE_WORD(sObjBME280.i16Temp);
+			S_BE_WORD(sObjBME280.u16Hum);
+			S_BE_WORD(sObjBME280.u16Pres);
+
+			if ( bSendMessage( au8Data, q-au8Data ) ) {
+			} else {
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 			}
 		} else {
-			// 一度初期化したら RESUME
-			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
+			//	Cold Start
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP); // スリープ状態へ遷移
 		}
 
-		uint8	au8Data[12];
-		uint8*	q = au8Data;
-		S_OCTET(sAppData.sSns.u8Batt);
-		S_BE_WORD(sAppData.sSns.u16Adc1);
-		S_BE_WORD(sAppData.sSns.u16Adc2);
-		S_BE_WORD(sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_X]);
-		S_BE_WORD(sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_Y]);
-		S_BE_WORD(sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_Z]);
-		S_OCTET( 0xFE );
 
-		if ( bSendMessage( au8Data, q-au8Data ) ) {
-		} else {
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
-		}
 
 #ifdef LITE2525A
 		vPortSetHi(LED);
@@ -190,6 +203,25 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 	}
 }
 
+PRSEV_HANDLER_DEF(E_STATE_APP_CHAT_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	if (eEvent == E_EVENT_NEW_STATE) {
+		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
+		V_PRINTF(LB"! Short Sleeping...");
+		V_FLUSH();
+
+		// センサー用の電源制御回路を Hi に戻す
+		vPortSetSns(FALSE);
+
+#ifdef LITE2525A
+		vPortSetLo(LED);
+#else
+		vPortSetHi(LED);
+#endif
+		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
+		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 100, FALSE, FALSE);
+	}
+}
+
 /**
  * イベント処理関数リスト
  */
@@ -198,6 +230,7 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
 	PRSEV_HANDLER_TBL_DEF(E_STATE_RUNNING),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_TX),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_SLEEP),
+	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_CHAT_SLEEP),
 	PRSEV_HANDLER_TBL_TRM
 };
 
@@ -250,7 +283,7 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
-		vProcessADXL345_LowEnergy(E_EVENT_TICK_TIMER);
+		vProcessBME280(E_EVENT_TICK_TIMER);
 		break;
 
 	case E_AHI_DEVICE_ANALOGUE:
@@ -340,12 +373,12 @@ static tsCbHandler sCbHandler = {
 /**
  * アプリケーション初期化
  */
-void vInitAppADXL345_LowEnergy() {
+void vInitAppBME280() {
 	psCbHandler = &sCbHandler;
 	pvProcessEv1 = vProcessEvCore;
 }
 
-static void vProcessADXL345_LowEnergy(teEvent eEvent) {
+static void vProcessBME280(teEvent eEvent) {
 	if (bSnsObj_isComplete(&sSnsObj)) {
 		 return;
 	}
@@ -353,12 +386,12 @@ static void vProcessADXL345_LowEnergy(teEvent eEvent) {
 	// イベントの処理
 	vSnsObj_Process(&sSnsObj, eEvent); // ポーリングの時間待ち
 	if (bSnsObj_isComplete(&sSnsObj)) {
-		u8sns_cmplt |= E_SNS_ADXL345_CMP;
+		u8sns_cmplt |= E_SNS_BME280_CMP;
 
-		V_PRINTF(LB"!ADXL345: X : %d, Y : %d, Z : %d",
-			sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_X],
-			sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_Y],
-			sObjADXL345.ai16Result[ADXL345_LOWENERGY_IDX_Z]
+		V_PRINTF(LB"!BME280: Temp : %d, Hum : %d, Pres : %d",
+			sObjBME280.i16Temp,
+			sObjBME280.u16Hum,
+			sObjBME280.u16Pres
 		);
 
 		// 完了時の処理

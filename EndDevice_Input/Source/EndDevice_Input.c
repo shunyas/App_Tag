@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -335,6 +335,19 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppDoorTimer();
 		} else
+		// BME280
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BME280 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppBME280();
+		} else
 		// S11059-02
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_S1105902 ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -413,7 +426,13 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			vInitHardware(FALSE);
 
 			// イベント処理の初期化
-			vInitAppADXL345();
+			if( sAppData.sFlash.sData.i16param&LOWENERGY ){
+				vInitAppADXL345_LowEnergy();
+			}else if ( sAppData.sFlash.sData.i16param&AIRVOLUME ){
+				vInitAppADXL345_AirVolume();
+			}else{
+				vInitAppADXL345();
+			}
 		} else
 		// ADXL345
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_LOWENERGY ) {
@@ -429,6 +448,20 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppADXL345_LowEnergy();
 		} else
+//		// ADXL345
+//		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_AIRVOLUME ) {
+//			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+//			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)//
+//
+			// ADC の初期化
+//			vInitADC();
+
+			// Other Hardware
+//			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+//			vInitAppADXL345_AirVolume();
+//		} else
 		// TSL2561
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
 				sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -675,52 +708,89 @@ static void vInitPulseCounter() {
  */
 static void vInitHardware(int f_warm_start) {
 #ifndef TWX0003
+#ifdef CNFMST
+	vPortSetLo(PORT_OUT4);		//	WD
+	vPortAsOutput(PORT_OUT4);		//	WD
+	vPortAsOutput(PORT_INPUT3);		//	WD_ENB
+#else
 	// 入力ポートを明示的に指定する
 	if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
 		vPortAsInput(DIO_BUTTON);
 		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
 	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
-		vPortAsInput(PORT_INPUT2);
-		vPortAsInput(PORT_INPUT3);
-		vPortDisablePullup(PORT_INPUT2);
-		vPortDisablePullup(PORT_INPUT3);
-		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
-		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
+		if(sAppData.sFlash.sData.i16param&LOWENERGY){
+			vPortDisablePullup(PORT_INPUT2);
+			vPortDisablePullup(PORT_INPUT3);
+			vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
+		}else if(sAppData.sFlash.sData.i16param&AIRVOLUME){
+			vPortAsInput(PORT_INPUT2);
+			vPortAsInput(PORT_INPUT3);
+			vPortDisablePullup(PORT_INPUT2);
+			vPortDisablePullup(PORT_INPUT3);
+			vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上がりに設定)
+		}else{
+			vPortAsInput(PORT_INPUT2);
+			vPortAsInput(PORT_INPUT3);
+			vPortDisablePullup(PORT_INPUT2);
+			vPortDisablePullup(PORT_INPUT3);
+			vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
+		}
 	}else if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_LOWENERGY ) {
 		vPortDisablePullup(PORT_INPUT2);
 		vPortDisablePullup(PORT_INPUT3);
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
+//	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_AIRVOLUME ){
+//		vPortAsInput(PORT_INPUT2);
+//		vPortAsInput(PORT_INPUT3);
+//		vPortDisablePullup(PORT_INPUT2);
+//		vPortDisablePullup(PORT_INPUT3);
+//		vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
+//		vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上がりに設定)
 	}
+#endif
 #endif
 
 	// Serial Port の初期化
-	vSerialInit();
+	{
+		uint32 u32baud;
+
+		// BPS ピンが Lo の時は 38400bps
+		vPortAsInput(PORT_BAUD);
+		u32baud = bPortRead(PORT_BAUD) ? UART_BAUD_SAFE : UART_BAUD;
+
+		// シリアル初期化
+		vSerialInit(u32baud, NULL);
+	}
 
 	// SMBUS の初期化
 	vSMBusInit();
 }
 
-/**
- * シリアルポートの初期化
+/** @ingroup MASTER
+ * UART を初期化する
+ * @param u32Baud ボーレート
  */
-void vSerialInit(void) {
+void vSerialInit(uint32 u32Baud, tsUartOpt *pUartOpt) {
 	/* Create the debug port transmit and receive queues */
-	static uint8 au8SerialTxBuffer[1024];
-	static uint8 au8SerialRxBuffer[512];
+	static uint8 au8SerialTxBuffer[768];
+	static uint8 au8SerialRxBuffer[256];
 
 	/* Initialise the serial port to be used for debug output */
 	sSerPort.pu8SerialRxQueueBuffer = au8SerialRxBuffer;
 	sSerPort.pu8SerialTxQueueBuffer = au8SerialTxBuffer;
-	sSerPort.u32BaudRate = UART_BAUD;
+	sSerPort.u32BaudRate = u32Baud;
 	sSerPort.u16AHI_UART_RTS_LOW = 0xffff;
 	sSerPort.u16AHI_UART_RTS_HIGH = 0xffff;
 	sSerPort.u16SerialRxQueueSize = sizeof(au8SerialRxBuffer);
 	sSerPort.u16SerialTxQueueSize = sizeof(au8SerialTxBuffer);
 	sSerPort.u8SerialPort = UART_PORT;
 	sSerPort.u8RX_FIFO_LEVEL = E_AHI_UART_FIFO_LEVEL_1;
-	SERIAL_vInit(&sSerPort);
+	SERIAL_vInitEx(&sSerPort, pUartOpt);
 
+	/* prepare stream for vfPrintf */
 	sSerStream.bPutChar = SERIAL_bTxChar;
 	sSerStream.u8Device = UART_PORT;
 }
@@ -775,6 +845,8 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 bool_t bSendMessage( uint8* pu8Data, uint8 u8Length ){
 	bool_t	bOk = TRUE;
 
+	vPortSetSns(FALSE);
+
 	// 暗号化鍵の登録
 	if (IS_APPCONF_OPT_SECURE()) {
 		bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
@@ -807,7 +879,7 @@ bool_t bSendMessage( uint8* pu8Data, uint8 u8Length ){
 	S_OCTET(sAppData.sFlash.sData.u8id);
 	S_BE_WORD(sAppData.u16frame_count);
 
-	if( sAppData.sFlash.sData.u8mode == 0xA1 ){
+	if( sAppData.sFlash.sData.u8mode == 0xA1 || sAppData.sFlash.sData.u8mode == 0xA2 ){
 		S_OCTET(0x35);	// ADXL345 LowEnergy Mode の時、普通のADXL345として送る
 	}else{
 		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子

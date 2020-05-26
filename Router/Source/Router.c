@@ -1,11 +1,19 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - 2013 all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
- * Condition to use:
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ * Condition to use: (refer to detailed conditions in Japanese)
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
+ *
+ * 利用条件:
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
+ *     保有しています。
+ *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
+ *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
 
@@ -110,11 +118,21 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	case E_STATE_IDLE:
 		if (eEvent == E_EVENT_START_UP) {
 			// フラッシュからの読み込みが成功すれば、その Layer を採用する
-			sAppData.sNwkLayerTreeConfig.u8Layer = sAppData.sFlash.sData.u8layer;
+
+			// レイヤ（本レイヤは４の倍数、サブレイヤは +0, 1, 2 で設定する）
+			uint8 u8layer = sAppData.sFlash.sData.u8layer  / 4;
+			uint8 u8sublayer = sAppData.sFlash.sData.u8layer % 4;
+			if (u8sublayer == 3) {
+				sAppData.sNwkLayerTreeConfig.u8LayerOptions = 0x01; // 一つ上位のノードのみに接続する
+				u8sublayer = 0;
+			}
+
+			sAppData.sNwkLayerTreeConfig.u8Layer = u8layer;
+			sAppData.sNwkLayerTreeConfig.u8MaxSublayers = u8sublayer;
 
 			if (IS_APPCONF_OPT_SECURE()) {
 				bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
-				V_PRINTF(LB "*** Register AES key (%d) ***", bRes);
+				A_PRINTF(LB "*** Register AES key (%d) ***", bRes);
 			}
 
 			// Router として始動
@@ -122,7 +140,7 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			sAppData.sNwkLayerTreeConfig.u16TxMaxDelayUp_ms = 100;
 			sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig(&sAppData.sNwkLayerTreeConfig);
 			if (sAppData.pContextNwk) {
-				vfPrintf(&sSerStream, LB "* start router (layer %d)", sAppData.sFlash.sData.u8layer);
+				A_PRINTF(LB "* start router (layer %d.%d)", sAppData.sFlash.sData.u8layer / 4, sAppData.sFlash.sData.u8layer % 4);
 				ToCoNet_Nwk_bInit(sAppData.pContextNwk);
 				ToCoNet_Nwk_bStart(sAppData.pContextNwk);
 				ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
@@ -131,7 +149,7 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			}
 
 			// start with verbose mode
-			Interactive_vSetMode(TRUE, 0);
+			Interactive_vSetMode(FALSE, 0);
 		}
 		break;
 
@@ -190,9 +208,9 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		Interactive_vInit();
 
 		// START UP MESSAGE
-		vfPrintf(&sSerStream, "\r\n*** ToCoTemp Parent %d.%02d-%d ***",
+		A_PRINTF("\r\n*** ToCoTemp Parent %d.%02d-%d ***",
 				VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-		vfPrintf(&sSerStream, LB "* App ID:%08x Long Addr:%08x Short Addr %04x",
+		A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x",
 				sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(),
 				sToCoNet_AppContext.u16ShortAddress);
 	}
@@ -242,26 +260,26 @@ PUBLIC void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 	int i;
 
 	// print coming payload
-	V_PRINTF(
+	A_PRINTF(
 			LB "[PKT Ad:%04x,Ln:%03d,Seq:%03d,Lq:%03d,Tms:%05d %s\"",
 			pRx->u32SrcAddr, pRx->u8Len, // Actual payload byte: the network layer uses additional 4 bytes.
 			pRx->u8Seq, pRx->u8Lqi, pRx->u32Tick & 0xFFFF, pRx->bSecurePkt ? "Enc " : "");
 
 	for (i = 0; i < pRx->u8Len; i++) {
 		if (i < 32) {
-			V_PUTCHAR((pRx->auData[i] >= 0x20 && pRx->auData[i] <= 0x7f) ?
+			A_PUTCHAR((pRx->auData[i] >= 0x20 && pRx->auData[i] <= 0x7f) ?
 							pRx->auData[i] : '.');
 		} else {
-			V_PRINTF( "..");
+			A_PRINTF( "..");
 			break;
 		}
 	}
-	V_PRINTF( "\"]");
+	A_PRINTF( "\"]");
 
 	// 暗号化対応時に平文パケットは受信しない
 	if (IS_APPCONF_OPT_SECURE()) {
 		if (!pRx->bSecurePkt) {
-			V_PRINTF( ".. skipped plain packet.");
+			A_PRINTF( ".. skipped plain packet.");
 			return;
 		}
 	}
@@ -316,7 +334,7 @@ PUBLIC void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
  * NOTES:
  ****************************************************************************/
 PUBLIC void cbToCoNet_vTxEvent(uint8 u8CbId, uint8 bStatus) {
-	V_PRINTF( LB ">>> MacAck%s(tick=%d,req=#%d) <<<",
+	A_PRINTF( LB ">>> MacAck%s(tick=%d,req=#%d) <<<",
 			bStatus ? "Ok" : "Ng",
 			u32TickCount_ms & 0xFFFF,
 			u8CbId
@@ -552,8 +570,8 @@ void vSerialInit(void) {
  * 初期化メッセージ
  */
 void vSerInitMessage() {
-	V_PRINTF(LB "*** " APP_NAME " (Router) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-	V_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d",
+	A_PRINTF(LB "*** " APP_NAME " (Router) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+	A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d",
 			sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
 			sAppData.sFlash.sData.u8id);
 }
@@ -566,6 +584,17 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 	return;
 }
 
+void vSerNwkInfoV() {
+	tsToCoNet_NwkLyTr_Context *pc = (void*)sAppData.pContextNwk;
+	V_PRINTF("** Nwk Conf"
+			 LB"* layer = %d"
+			 LB"* sublayer = %d"
+			 LB"* state = %d",
+		pc->sInfo.u8Layer,
+		pc->sInfo.u8LayerSub,
+		pc->sInfo.u8State
+	);
+}
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

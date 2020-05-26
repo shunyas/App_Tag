@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -38,6 +38,7 @@ extern "C" {
 
 /* Serial Configuration */
 #define UART_BAUD   		115200
+#define UART_BAUD_SAFE		38400
 #define UART_PARITY_ENABLE	E_AHI_UART_PARITY_DISABLE
 #define UART_PARITY_TYPE 	E_AHI_UART_ODD_PARITY // if enabled
 #define UART_BITLEN			E_AHI_UART_WORD_LEN_8
@@ -123,6 +124,7 @@ extern "C" {
 
 #define PORT_INPUT_MASK ( 1UL << DIO_BUTTON)
 #define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON) | (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
+#define PORT_INPUT_MASK_AIRVOLUME ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
 //#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON ) | (1UL <<  PORT_INPUT3) )
 #define PORT_INPUT_MASK_ACL ( (1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON) )
 

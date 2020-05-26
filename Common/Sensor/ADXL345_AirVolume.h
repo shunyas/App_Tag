@@ -17,8 +17,8 @@
  *
  ****************************************************************************/
 
-#ifndef  BH1715_INCLUDED
-#define  BH1715_INCLUDED
+#ifndef  ADXL345_INCLUDED
+#define  ADXL345_INCLUDED
 
 #if defined __cplusplus
 extern "C" {
@@ -27,49 +27,61 @@ extern "C" {
 /****************************************************************************/
 /***        Include Files                                                 ***/
 /****************************************************************************/
-#include "sensor_driver.h"
+#include "appsave.h"
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+#define ADXL345_AirVolume_IDX_X 0
+#define ADXL345_AirVolume_IDX_Y 1
+#define ADXL345_AirVolume_IDX_Z 2
 
+#define ADXL345_AirVolume_IDX_BEGIN 0
+#define ADXL345_AirVolume_IDX_END (ADXL345_AirVolume_IDX_Z+1) // should be (last idx + 1)
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
 typedef struct {
 	// protected
-	bool_t bBusy;          // should block going into sleep
+	bool_t	bBusy;			// should block going into sleep
 
-	// public
-	int16 i16Result;
+	// data
+	int32	ai32Result[3];
+	uint8	u8Interrupt;
 
-	// private
-	uint8 u8TickCount, u8TickWait;
-} tsObjData_BH1715;
+	// working
+	uint8	u8TickCount, u8TickWait;
+} tsObjData_ADXL345;
 
 /****************************************************************************/
 /***        Exported Functions (state machine)                            ***/
 /****************************************************************************/
-void vBH1715_Init(tsObjData_BH1715 *pData, tsSnsObj *pSnsObj);
-void vBH1715_Final(tsObjData_BH1715 *pData, tsSnsObj *pSnsObj);
-
 
 /****************************************************************************/
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
-PUBLIC bool_t bBH1715reset();
-PUBLIC bool_t bBH1715startRead();
-PUBLIC int16 i16BH1715readResult();
+void vADXL345_AirVolume_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
+bool_t bADXL345_AirVolume_Setting();
+void vADXL345_AirVolume_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
+
+bool_t bSetFIFO_Air();
+bool_t bSetActive();
+uint8 u8Read_Interrupt_Air();
+
+PUBLIC bool_t bADXL345_AirVolumeReset();
+PUBLIC bool_t bADXL345_AirVolumeStartRead();
+PUBLIC bool_t b16ADXL345_AirVolumeReadResult( int32* ai32accel );
+PUBLIC bool_t b16ADXL345_AirVolumeSingleReadResult( int32* ai32accel );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
-
+extern uint8 u8Interrupt;
 #if defined __cplusplus
 }
 #endif
 
-#endif  /* BH1715_INCLUDED */
+#endif  /* ADXL345_INCLUDED */
 
 /****************************************************************************/
 /***        END OF FILE                                                   ***/

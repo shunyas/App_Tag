@@ -1,7 +1,10 @@
 VERSION_MAIN = 1
-VERSION_SUB  = 5
-VERSION_VAR  = 3
+VERSION_SUB  = 6
+VERSION_VAR  = 1
 
+# 1.6.1 ADXL345のAirVolumeとLowEnergyモードの番号を変更
+# 1.6.0 AirVolume機能を追加
+# 1.5.4 BME280 対応、その他修正
 # 1.5.3 ADXL345 シェイクモードの調整 FIFOの修正
 # 1.5.2 ADXL345 シェイクモードの追加
 # 1.5.1 省エネモードの追加

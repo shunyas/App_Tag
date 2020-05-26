@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -110,6 +110,7 @@ extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 void vInitAppStandard();
 void vInitAppButton();
 void vInitAppSHT21();
+void vInitAppBME280();
 void vInitAppS1105902();
 void vInitAppADT7410();
 void vInitAppMPL115A2();
@@ -117,6 +118,7 @@ void vInitAppLIS3DH();
 void vInitAppL3GD20();
 void vInitAppADXL345();
 void vInitAppADXL345_LowEnergy();
+void vInitAppADXL345_AirVolume();
 void vInitAppTSL2561();
 void vInitAppDoorTimer();
 void vInitAppUart();

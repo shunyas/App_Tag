@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -74,19 +74,17 @@ enum {
 };
 
 //	割り込み判定マクロ
-#define bIS_TAP()  sObjADXL345.u8Interrupt&0x40
-#define bIS_DTAP()  sObjADXL345.u8Interrupt&0x20
-#define bIS_FREEFALL()  sObjADXL345.u8Interrupt&0x04
-#define bIS_ACTIVE()  sObjADXL345.u8Interrupt&0x10
-#define bIS_INACTIVE()  sObjADXL345.u8Interrupt&0x08
+#define bIS_TAP()  (sObjADXL345.u8Interrupt&0x40)
+#define bIS_DTAP()  (sObjADXL345.u8Interrupt&0x20)
+#define bIS_FREEFALL() (sObjADXL345.u8Interrupt&0x04)
+#define bIS_ACTIVE()  (sObjADXL345.u8Interrupt&0x10)
+#define bIS_INACTIVE()  (sObjADXL345.u8Interrupt&0x08)
 #define bIS_WATERMARK()  (sObjADXL345.u8Interrupt&0x02)
 
 //	サイコロの各々の面だったときに送信するデータマクロ
 #define DICE1() \
 	S_OCTET(0x01);\
 	S_OCTET(0x0F);\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );
@@ -96,16 +94,12 @@ enum {
 	S_OCTET(0x0F);\
 	S_OCTET( 0x7D );\
 	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );
 
 #define DICE3() \
 	S_OCTET(0x09);\
 	S_OCTET(0x0F);\
 	S_OCTET( 0x7D );\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );\
 	S_OCTET( 0x00 );
 
@@ -114,27 +108,21 @@ enum {
 	S_OCTET(0x0F);\
 	S_OCTET( 0x7D );\
 	S_OCTET( 0x00 );\
-	S_OCTET( 0x7D );\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );
+	S_OCTET( 0x7D );
 
 #define DICE5() \
 	S_OCTET(0x0B);\
 	S_OCTET(0x0F);\
 	S_OCTET( 0x7D );\
 	S_OCTET( 0x00 );\
-	S_OCTET( 0x7D );\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );
+	S_OCTET( 0x7D );
 
 #define DICE6() \
 	S_OCTET(0x0E);\
 	S_OCTET(0x0F);\
 	S_OCTET( 0x7D );\
 	S_OCTET( 0x7D );\
-	S_OCTET( 0x7D );\
-	S_OCTET( 0x00 );\
-	S_OCTET( 0x00 );
+	S_OCTET( 0x7D );
 
 #define POWER0() \
 	S_OCTET(0x00);\
@@ -184,7 +172,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
-			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
+			bADXL345_Setting( sAppData.sFlash.sData.i16param&0x03FF, sAppData.sFlash.sData.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
 			if( sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap != 0 ){
 				au16ThTable[0] = sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap;
 			}
@@ -289,7 +277,6 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 				bLightOff = TRUE;
 			}
 
-
 			V_PRINTF(LB"Wake=%s Off=%s Accel=%d Param=%d",
 					sAppData.bWakeupByButton ? "TRUE": "FALSE",
 					bLightOff ? "TRUE": "FALSE",
@@ -302,7 +289,8 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 				(aCounter == ACTIVE_NUM && i16AveAccel > au16ThTable[0] && bHold == FALSE ) ||
 				iCounter == INACTIVE_NUM ||
 				( i16AveAccel <= au16ThTable[0]  && bNoChangePkt == FALSE && iCounter == 1 )  ){
-				if( iCounter == INACTIVE_NUM ){
+				if( iCounter == INACTIVE_NUM &&
+					!(( sAppData.sFlash.sData.i16param == SHAKE_FAN || sAppData.sFlash.sData.i16param == SHAKE_HOLD ) && bLightOff_Hold) ){
 					bNoChangePkt = TRUE;
 				}else{
 					bNoChangePkt = FALSE;
@@ -349,10 +337,21 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			bFirst = FALSE;
 			V_PRINTF(LB"*** First Sleep...");
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
+		}else if ( (sAppData.sFlash.sData.i16param&DICE) && bIS_ACTIVE() != 0 && sAppData.bWakeupByButton ){
+			V_PRINTF(LB"*** Active Sleep...");
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 		}else{
+
 			bFirst = FALSE;
 
 			if( IS_APPCONF_OPT_APP_TWELITE() ){		//	App_Twelites
+				if( sAppData.sFlash.sData.i16param&DICE ){
+					if( bIS_INACTIVE() && sAppData.bWakeupByButton ){
+						bNoChangePkt = TRUE;
+					}else{
+						bNoChangePkt = FALSE;
+					}
+				}
 				vSendToAppTweLite();
 			}else{									//	Samp_Monitor
 				if( !bSendToSampMonitor() ){
@@ -398,8 +397,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		vPortSetHi(LED);
 #endif
 		// 周期スリープに入る
-		if( sAppData.sFlash.sData.i16param == DICE ||
-			sAppData.sFlash.sData.i16param == NORMAL ||
+		if( sAppData.sFlash.sData.i16param == NORMAL ||
 			sAppData.sFlash.sData.i16param == NEKOTTER ){
 
 			uint32 u32SleepDur_ms = sAppData.sFlash.sData.u32Slp;
@@ -424,13 +422,13 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 			vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
 			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
 
-			ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, u32SleepDur_ms, FALSE, FALSE);
+			ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, u32SleepDur_ms, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
 		}else{
 			if( IS_APPCONF_OPT_APP_TWELITE() &&
 				( bLightOff && (sAppData.sFlash.sData.i16param&SHAKE) == 0 ) ){
 				vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
 				u8Read_Interrupt();	//	加速度センサの割り込みレジスタをクリア
-				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, FALSE, FALSE);
+				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
 			}
 			else{
 				//	割り込みの設定
@@ -441,7 +439,11 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 
 				u8Read_Interrupt();	//	加速度センサの割り込みレジスタをクリア
 
-				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+				if( (sAppData.sFlash.sData.i16param&DICE) && bIS_INACTIVE() != 0 && sAppData.bWakeupByButton ){
+					ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
+				}else{
+					ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+				}
 			}
 		}
 	}
@@ -642,9 +644,6 @@ static void vStoreSensorValue() {
 	if (sAppData.sSns.u16Adc1 >= VOLT_SUPERCAP_CONTROL) {
 		vPortSetLo(DIO_SUPERCAP_CONTROL);
 	}
-
-	// センサー用の電源制御回路を Hi に戻す
-	vPortSetSns(FALSE);
 }
 
 static void vSendToAppTweLite(){
@@ -677,28 +676,71 @@ static void vSendToAppTweLite(){
 		S_BE_WORD(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);	//	電源電圧
 		S_OCTET(0);									// 温度(ダミー)
 
-		if( sAppData.sFlash.sData.i16param == DICE ){
+		if( sAppData.sFlash.sData.i16param&DICE ){
 			uint8 u8Dice = u8PlayDice( sObjADXL345.ai16Result );
 			switch(u8Dice){
 			case 1:
 				DICE1();
 				break;
 			case 2:
-				DICE2();
+				if( (sAppData.sFlash.sData.i16param&0x0001) == 1 ){
+					S_OCTET(0x02);
+					S_OCTET(0x0F);
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+				}else{
+					DICE2();
+				}
 				break;
 			case 3:
-				DICE3();
+				if( (sAppData.sFlash.sData.i16param&0x0001) == 1 ){
+					S_OCTET(0x04);
+					S_OCTET(0x0F);
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+				}else{
+					DICE3();
+				}
 				break;
 			case 4:
-				DICE4();
+				if( (sAppData.sFlash.sData.i16param&0x0001) == 1 ){
+					S_OCTET(0x08);
+					S_OCTET(0x0F);
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+				}else{
+					DICE4();
+				}
 				break;
 			case 5:
-				DICE5();
+				if( (sAppData.sFlash.sData.i16param&0x0001) == 1 ){
+					S_OCTET(0x00);
+					S_OCTET(0x0F);
+					S_OCTET( 0x7D );
+					S_OCTET( 0x00 );
+					S_OCTET( 0x00 );
+				}else{
+					DICE5();
+				}
 				break;
 			case 6:
-				DICE6();
+				if( (sAppData.sFlash.sData.i16param&0x0001) == 1 ){
+					S_OCTET(0x00);
+					S_OCTET(0x0F);
+					S_OCTET( 0x00 );
+					S_OCTET( 0x7D );
+					S_OCTET( 0x00 );
+				}else{
+					DICE6();
+				}
 				break;
 			}
+			//	目の大きさによってPWMのDUTYを変化させる。
+			S_OCTET( 25*(u8Dice-1) );
+			S_OCTET( 0x00 );
 		}else if( sAppData.sFlash.sData.i16param&SHAKE ){
 			uint8 u8PowTemp = u8ShakePower( sObjADXL345.ai16Result );
 			if( sAppData.sFlash.sData.i16param == SHAKE_ACC1 || sAppData.sFlash.sData.i16param == SHAKE_ACC2 || sAppData.sFlash.sData.i16param == SHAKE_ACC3 ){
@@ -864,7 +906,7 @@ static bool_t bSendToSampMonitor( void ){
 		S_OCTET(sAppData.sSns.u8Batt);
 		S_BE_WORD(sAppData.sSns.u16Adc1);
 		S_BE_WORD(sAppData.sSns.u16Adc2);
-		if( sAppData.sFlash.sData.i16param == DICE ){
+		if( sAppData.sFlash.sData.i16param&DICE ){
 			S_BE_WORD(u8PlayDice( sObjADXL345.ai16Result));
 			S_BE_WORD(0x0000);
 			S_BE_WORD(0x0000);
@@ -916,7 +958,7 @@ static bool_t bSendToSampMonitor( void ){
 			S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_Z]);
 		}
 
-		if( sAppData.sFlash.sData.i16param == DICE ){
+		if( sAppData.sFlash.sData.i16param&DICE ){
 			S_OCTET( 0xFD );
 		}
 		else

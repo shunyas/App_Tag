@@ -20,18 +20,22 @@
 /****************************************************************************/
 /***        Include files                                                 ***/
 /****************************************************************************/
+#include<math.h>
+
 #include "jendefs.h"
 #include "AppHardwareApi.h"
 #include "string.h"
 #include "fprintf.h"
 
 #include "sensor_driver.h"
-#include "L3GD20.h"
+#include "BME280.h"
 #include "SMBus.h"
 
 #include "ccitt8.h"
 
 #include "utils.h"
+
+#include "Interactive.h"
 
 #undef SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
@@ -39,36 +43,22 @@
 # include <fprintf.h>
 extern tsFILE sDebugStream;
 #endif
-tsFILE sSerStream;
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define L3GD20_ADDRESS		(0x6B)
+#define BME280_ADDRESS		(0x76)
+//#define BME280_ADDRESS		(0x77)
 
-#define L3GD20_CTRL_REG1	(0x20)
+#define BME280_CONVTIME    (0)//(24+2) // 24ms MAX
 
-#define L3GD20_X			(0x28)
-#define L3GD20_Y			(0x2A)
-#define L3GD20_Z			(0x2C)
+#define BME280_CONFIG		0xF5
+#define BME280_CTRL_MEAS	0xF4
+#define BME280_STATUS		0xF3
+#define BME280_CTRL_HUM		0xF2
 
-#define L3GD20_WHO			(0x0F)
-#define L3GD20_NAME			(0xD4)
-
-#define L3GD20_CONVTIME    (24+2) // 24ms MAX
-
-#define L3GD20_DATA_NOTYET  (-32768)
-#define L3GD20_DATA_ERROR   (-32767)
-
-const uint8 L3GD20_AXIS[] = {
-		L3GD20_X,
-		L3GD20_Y,
-		L3GD20_Z
-};
-
-#define L3GD20_RES250DPS	0x00
-#define L3GD20_RES500DPS	0x01
-#define L3GD20_RES2000DPS	0x02
+#define BME280_DATA_NOTYET	(-32768)
+#define BME280_DATA_ERROR	(-32767)
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -77,8 +67,9 @@ const uint8 L3GD20_AXIS[] = {
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
-PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent);
+PRIVATE bool_t bReadTrim();
+PRIVATE bool_t bReadData( uint8* pu8Data );
+PRIVATE void vProcessSnsObj_BME280(void *pvObj, teEvent eEvent);
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -87,40 +78,70 @@ PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent);
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
-static uint16	u16mode;
+static uint16 dig_T1;
+static int16 dig_T2;
+static int16 dig_T3;
+static uint16 dig_P1;
+static int16 dig_P2;
+static int16 dig_P3;
+static int16 dig_P4;
+static int16 dig_P5;
+static int16 dig_P6;
+static int16 dig_P7;
+static int16 dig_P8;
+static int16 dig_P9;
+static uint8 dig_H1;
+static int16 dig_H2;
+static uint8 dig_H3;
+static int16 dig_H4;
+static int16 dig_H5;
+static int8 dig_H6;
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj, int16 i16param) {
+void vBME280_Init(tsObjData_BME280 *pData, tsSnsObj *pSnsObj) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
-	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_L3GD20;
+	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_BME280;
 
-	memset((void*)pData, 0, sizeof(tsObjData_L3GD20));
-
-	u16mode = (uint16)i16param;
+	memset((void*)pData, 0, sizeof(tsObjData_BME280));
 }
 
-void vL3GD20_Final(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
+void vBME280_Final(tsObjData_BME280 *pData, tsSnsObj *pSnsObj) {
 	pSnsObj->u8State = E_SNSOBJ_STATE_INACTIVE;
 }
 
+//	センサの設定を記述する関数
+bool_t bBME280_Setting()
+{
+	bool_t bOk = TRUE;
 
+	uint8 com = (0x06<<5) | (0x00<<2) | 0x00;		//	WaitTime | Filter | 3 wires or 4 wires SPI
+	bOk &= bSMBusWrite(BME280_ADDRESS, BME280_CONFIG, 1, &com );
+	com = (0x01<<5) | (0x01<<2) | 0x00;		//	Temp Enable | Pres Enable | Mode
+	bOk &= bSMBusWrite(BME280_ADDRESS, BME280_CTRL_MEAS, 1, &com );
+	com = 0x01;		//	Hum Enable
+	bOk &= bSMBusWrite(BME280_ADDRESS, BME280_CTRL_HUM, 1, &com );
+
+	bReadTrim();
+
+	return bOk;
+}
 
 /****************************************************************************
  *
- * NAME: bL3GD20reset
+ * NAME: bBME280reset
  *
  * DESCRIPTION:
- *   to reset L3GD20 device
+ *   to reset BME280 device
  *
  * RETURNS:
  * bool_t	fail or success
  *
  ****************************************************************************/
-PUBLIC bool_t bL3GD20reset()
+PUBLIC bool_t bBME280Reset()
 {
 	bool_t bOk = TRUE;
 	return bOk;
@@ -137,38 +158,17 @@ PUBLIC bool_t bL3GD20reset()
  * void
  *
  ****************************************************************************/
-PUBLIC bool_t bL3GD20startRead()
+PUBLIC bool_t bBME280StartRead()
 {
 	bool_t bOk = TRUE;
-	uint8 u8com;
-	uint8 u8name = 0x00;
-
-	//	Who am I?
-	bOk &= bSMBusWrite(L3GD20_ADDRESS, L3GD20_WHO, 0, NULL);
-	bOk &= bSMBusSequentialRead(L3GD20_ADDRESS, 1, &u8name);
-	if( !bOk && u8name != L3GD20_NAME ){
-		return FALSE;
-	}
-
-	// Set Option
-	u8com = 0x0F;	// x,y,z enable, Power on, ODR:95Hz, Cutoff:12.5Hz
-	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_CTRL_REG1, 1, &u8com );
-
-	if( L3GD20_RES500DPS == u16mode ){
-		u8com = 0x10;	// +-500dps
-	}else if( L3GD20_RES2000DPS == u16mode ){
-		u8com = 0x20;	// +-2000dps
-	} else {
-		u8com = 0x00;	// +-250dps
-	}
-	bOk &= bSMBusWrite( L3GD20_ADDRESS, 0x23, 1, &u8com );
-
+	uint8 com = (0x01<<5) | (0x01<<2) | 0x03;		//	Temp Enable | Pres Enable | Mode
+	bOk &= bSMBusWrite(BME280_ADDRESS, BME280_CTRL_MEAS, 1, &com );
 	return bOk;
 }
 
 /****************************************************************************
  *
- * NAME: u16L3GD20readResult
+ * NAME: u16BME280readResult
  *
  * DESCRIPTION:
  * Wrapper to read a measurement, followed by a conversion function to work
@@ -183,66 +183,129 @@ PUBLIC bool_t bL3GD20startRead()
  *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC int16 i16L3GD20readResult( uint8 u8axis )
+PUBLIC int16 i16BME280ReadResult( int16* Temp, uint16* Pres, uint16* Hum )
 {
-	bool_t	bOk = TRUE;
 	int16	i16result=0;
-	uint8	au8data[2];
+	uint8	au8data[8];
+	int32	i32Temp_raw;
+	int32	i32Pres_raw;
+	int32	i32Hum_raw;
+	int32	i32var1, i32var2;
+	int32	t_fine;
 
-	//	各軸の読み込み
-	switch( u8axis ){
-		case L3GD20_IDX_X:
-			bOk &= bGetAxis( L3GD20_IDX_X, au8data );
-			break;
-		case L3GD20_IDX_Y:
-			bOk &= bGetAxis( L3GD20_IDX_Y, au8data );
-			break;
-		case L3GD20_IDX_Z:
-			bOk &= bGetAxis( L3GD20_IDX_Z, au8data );
-			break;
-		default:
-			bOk = FALSE;
-	}
+	bool_t bOk = bReadData(au8data);
 
-	if( L3GD20_RES500DPS == u16mode ){
-		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.0175;		//	+-500dps
-	}else if( L3GD20_RES2000DPS == u16mode ){
-		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.07;			//	+-2000dps
-	} else {
-		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.00875;		//	+-250dps( Degree per Second )
-	}
+	i32Pres_raw = au8data[0]<<12 | au8data[1]<<4 | au8data[2]>>4;
+	i32Temp_raw = au8data[3]<<12 | au8data[4]<<4 | au8data[5]>>4;
+	i32Hum_raw = au8data[6]<<8 | au8data[7];
 
 	if (bOk == FALSE) {
 		i16result = SENSOR_TAG_DATA_ERROR;
 	}
-#ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rL3GD20 DATA %x", *((uint16*)au8data) );
-#endif
 
-    return i16result;
+	//	ここからのアルゴリズムの詳細はデータシートの4.2.3 Compensation formulas, 8.2 Pressure compensation in 32 bit fixed point を参照
+	//	Convert to Temperature
+	i32var1 = ((((i32Temp_raw>>3)-((int32)dig_T1<<1))) * ((int32)dig_T2))>>11;
+	i32var2 = (((((i32Temp_raw>>4)-((int32)dig_T1)) * ((i32Temp_raw>>4)-((int32)dig_T1)))>>12) * ((int32)dig_T3))>>14;
+	t_fine = i32var1+i32var2;
+	int16 i16Temp = (int16)((t_fine*5+128)>>8);
+	*Temp = i16Temp;
+
+	//	Convert to Pressure
+	i32var1 = (t_fine>>1)-64000;
+	i32var2 = ((i32var1>>2)*(i32var1>>2)>>11)*(int16)dig_P6;
+	i32var2 = i32var2+((i32var1*dig_P5)<<1);
+	i32var2 = (i32var2>>2)+(((int32)dig_P4)<<16);
+	i32var1 = (((dig_P3 * (((i32var1>>2) * (i32var1>>2)) >> 13 )) >> 3) + ((((int32)dig_P2) * i32var1)>>1))>>18;
+	i32var1 = ((((32768+i32var1))*((int32)dig_P1))>>15);
+
+	uint16 u16Pres;
+	uint32 u32Pres_Tmp;
+	if (i32var1 == 0){
+		u16Pres = 0;// avoid exception caused by division by zero
+	}else{
+		u32Pres_Tmp = (((uint32)(((int32)1048576)-i32Pres_raw)-(i32var2>>12)))*3125;
+		if (u32Pres_Tmp < 0x80000000){
+			u32Pres_Tmp = (u32Pres_Tmp << 1) / ((uint32)i32var1);
+		}else{
+			u32Pres_Tmp = (u32Pres_Tmp / (uint32)i32var1) * 2;
+		}
+		i32var1 = (((int32)dig_P9) * ((int32)(((u32Pres_Tmp>>3) * (u32Pres_Tmp>>3))>>13)))>>12;
+		i32var2 = (((int32)(u32Pres_Tmp>>2)) * ((int32)dig_P8))>>13;
+		u32Pres_Tmp = (uint32)((int32)u32Pres_Tmp + ((i32var1 + i32var2 + dig_P7) >> 4));
+		u16Pres = (uint16)(u32Pres_Tmp/100);
+	}
+	*Pres = u16Pres;
+
+	// Convert to Humidity
+	int32 i32Hum_Tmp = t_fine-76800;
+	i32Hum_Tmp = (((((i32Hum_raw<<14)-(((int32)dig_H4) << 20)-(((int32)dig_H5)*i32Hum_Tmp))+((int32)16384))>>15)*(((((((i32Hum_Tmp*((int32)dig_H6))>>10)*(((i32Hum_Tmp*((int32)dig_H3))>>11)+((int32)32768)))>>10)+((int32)2097152))*((int32)dig_H2)+ 8192)>>14));
+	i32Hum_Tmp = (i32Hum_Tmp-(((((i32Hum_Tmp>>15)*(i32Hum_Tmp>>15))>>7)*((int32)dig_H1))>> 4));
+	i32Hum_Tmp = (i32Hum_Tmp<0 ? 0 : i32Hum_Tmp);
+	i32Hum_Tmp = (i32Hum_Tmp>419430400 ? 419430400 : i32Hum_Tmp);
+	uint16 u16Hum = (uint16)((i32Hum_Tmp>>12)/10);
+	*Hum = u16Hum;
+
+	return i16result;
 }
 
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
+PRIVATE bool_t bReadTrim()
 {
-	uint8 i;
-	bool_t bOk = TRUE;
+	bool_t	bOk = TRUE;
+	uint8	au8data[32];
+	uint8*	p = au8data;
 
-	//	なぜか2バイトずつ読めない
-	for( i=0; i<2; i++ ){
-		bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_AXIS[u8axis]+i, 0, NULL );
-		bOk &= bSMBusSequentialRead( L3GD20_ADDRESS, 1, &au8data[i] );
-	}
+	bOk &= bSMBusWrite( BME280_ADDRESS, 0x88, 0, NULL );
+	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 25, p );
+	p += 25;
+
+	bOk &= bSMBusWrite( BME280_ADDRESS, 0xE1, 0, NULL );
+	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 7, p );
+
+	dig_T1 = au8data[1]<<8 | au8data[0];
+	dig_T2 = au8data[3]<<8 | au8data[2];
+	dig_T3 = au8data[5]<<8 | au8data[4];
+
+	dig_P1 = au8data[7]<<8 | au8data[6];
+	dig_P2 = au8data[9]<<8 | au8data[8];
+	dig_P3 = au8data[11]<<8 | au8data[10];
+	dig_P4 = au8data[13]<<8 | au8data[12];
+	dig_P5 = au8data[15]<<8 | au8data[14];
+	dig_P6 = au8data[17]<<8 | au8data[16];
+	dig_P7 = au8data[19]<<8 | au8data[18];
+	dig_P8 = au8data[21]<<8 | au8data[20];
+	dig_P9 = au8data[23]<<8 | au8data[22];
+
+	dig_H1 = au8data[24];
+	dig_H2 = au8data[26]<<8 | au8data[25];
+	dig_H3 = au8data[27];
+	dig_H4 = au8data[28]<<4 | (au8data[29]&0x0F);
+	dig_H5 = au8data[30]<<4 | ((au8data[29]&0xF0)>>4);
+	dig_H6 = au8data[31];
+
+	return bOk;
+}
+
+PRIVATE bool_t bReadData( uint8* pu8Data )
+{
+	bool_t	bOk = TRUE;
+
+	bOk &= bSMBusWrite( BME280_ADDRESS, 0xF7, 0, NULL );
+	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 8, pu8Data );
+
+	uint8 com = (0x01<<5) | (0x01<<2) | 0x00;		//	Temp Enable | Pres Enable | Mode
+	bOk &= bSMBusWrite(BME280_ADDRESS, BME280_CTRL_MEAS, 1, &com );
 
 	return bOk;
 }
 
 // the Main loop
-PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent) {
+PRIVATE void vProcessSnsObj_BME280(void *pvObj, teEvent eEvent) {
 	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
-	tsObjData_L3GD20 *pObj = (tsObjData_L3GD20 *)pSnsObj->pvData;
+	tsObjData_BME280 *pObj = (tsObjData_BME280 *)pSnsObj->pvData;
 
 	// general process (independent from each state)
 	switch (eEvent) {
@@ -257,7 +320,7 @@ vfPrintf(&sDebugStream, "+");
 		case E_EVENT_START_UP:
 			pObj->u8TickCount = 100; // expire immediately
 #ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
+vfPrintf(&sDebugStream, "\n\rBME280 WAKEUP");
 #endif
 			break;
 		default:
@@ -280,7 +343,7 @@ vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
 			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
 
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rL3GD20 KICKED");
+			vfPrintf(&sDebugStream, "\n\rBME280 KICKED");
 			#endif
 
 			break;
@@ -293,19 +356,19 @@ vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
 	case E_SNSOBJ_STATE_MEASURING:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			pObj->ai16Result[L3GD20_IDX_X] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[L3GD20_IDX_Y] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[L3GD20_IDX_Z] = SENSOR_TAG_DATA_ERROR;
-			pObj->u8TickWait = L3GD20_CONVTIME;
+			pObj->i16Temp = SENSOR_TAG_DATA_ERROR;
+			pObj->u16Hum = SENSOR_TAG_DATA_ERROR;
+			pObj->u16Pres = SENSOR_TAG_DATA_ERROR;
+			pObj->u8TickWait = BME280_CONVTIME;
 
 			pObj->bBusy = TRUE;
-#ifdef L3GD20_ALWAYS_RESET
+#ifdef BME280_ALWAYS_RESET
 			u8reset_flag = TRUE;
-			if (!bL3GD20reset()) {
+			if (!bBME280reset()) {
 				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
 #else
-			if (!bL3GD20startRead()) { // kick I2C communication
+			if (!bBME280StartRead()) { // kick I2C communication
 				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
 #endif
@@ -318,21 +381,7 @@ vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
 
 		// wait until completion
 		if (pObj->u8TickCount > pObj->u8TickWait) {
-#ifdef L3GD20_ALWAYS_RESET
-			if (u8reset_flag) {
-				u8reset_flag = 0;
-				if (!bL3GD20startRead()) {
-					vL3GD20_new_state(pObj, E_SNSOBJ_STATE_COMPLETE);
-				}
-
-				pObj->u8TickCount = 0;
-				pObj->u8TickWait = L3GD20_CONVTIME;
-				break;
-			}
-#endif
-			pObj->ai16Result[L3GD20_IDX_X] = i16L3GD20readResult(L3GD20_IDX_X);
-			pObj->ai16Result[L3GD20_IDX_Y] = i16L3GD20readResult(L3GD20_IDX_Y);
-			pObj->ai16Result[L3GD20_IDX_Z] = i16L3GD20readResult(L3GD20_IDX_Z);
+			i16BME280ReadResult(&pObj->i16Temp, &pObj->u16Pres, &pObj->u16Hum );
 
 			// data arrival
 			pObj->bBusy = FALSE;
@@ -344,7 +393,7 @@ vfPrintf(&sDebugStream, "\n\rL3GD20 WAKEUP");
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rL3GD20_CP: %d", pObj->i16Result);
+			vfPrintf(&sDebugStream, "\n\rBME280_CP: %d", pObj->i16Result);
 			#endif
 
 			break;

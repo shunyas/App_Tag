@@ -1,18 +1,18 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
  * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
  *
  * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限り東京コスモス電機が著作権を
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
  *     保有しています。
  *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についても東京コスモス電機は保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、東京コスモス電機が販売する TWE シリーズ上で実行する前提で公開
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
  *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
@@ -351,8 +351,11 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 #ifdef ROUTER
 	case 'l': // 出力の変更
-		V_PRINTF("Layer [1-63]: ");
-		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 2,
+		V_PRINTF(   "Layer: "
+				 LB "   XXY XX=Layer(1-63)"
+				 LB "        Y=MaxSubLayer(0-2)"
+				 LB "Input :");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 3,
 				E_APPCONF_LAYER);
 		break;
 #endif
@@ -475,12 +478,16 @@ static void vProcessInputByte(uint8 u8Byte) {
 			V_PRINTF("* AppID %08x, LongAddr, %08x, ShortAddr %04x, Tk: %d" LB,
 					sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(),
 					sToCoNet_AppContext.u16ShortAddress, u32TickCount_ms);
+			V_PRINTF("* Ch=%d"LB,
+					sToCoNet_AppContext.u8Channel);
 			if (sAppData.bFlashLoaded) {
 				V_PRINTF("** Conf "LB);
 				V_PRINTF("* AppId = %08x"LB, sAppData.sFlash.sData.u32appid);
 				V_PRINTF("* ChMsk = %08x"LB, sAppData.sFlash.sData.u32chmask);
-				V_PRINTF("* Ch=%d"LB,
-						sToCoNet_AppContext.u8Channel);
+#ifdef ROUTER
+				extern void vSerNwkInfoV();
+				vSerNwkInfoV();
+#endif
 			} else {
 				V_PRINTF("** Conf: none"LB);
 			}
@@ -621,11 +628,15 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 #ifdef ROUTER
 	case E_APPCONF_LAYER:
 		_C {
-			uint32 u32val = u32string2dec(pu8str, u8idx);
+			uint32 u32val = u32string2hex(pu8str, u8idx);
 			V_PRINTF(LB"-> ");
-			if (u32val && u32val <= 63) {
-				sConfig_UnSaved.u8layer = u32val;
-				V_PRINTF("%d"LB, u32val);
+
+			uint8 u8layer = u32val >> 4;
+			uint8 u8subl = u32val & 0xF;
+
+			if (u8layer >= 1 && u8layer <= 63 && u8subl <= 3) {
+				sConfig_UnSaved.u8layer = u8layer * 4 + u8subl;
+				V_PRINTF("%d.%d"LB, u8layer, u8subl);
 			} else {
 				V_PRINTF("(ignored)"LB);
 			}
@@ -1155,9 +1166,12 @@ static void vSerUpdateScreen() {
 			FL_IS_MODIFIED_u8(pow) ? '*' : ' ');
 
 #ifdef ROUTER
-	V_PRINTF(" l: set layer (%d)%c" LB,
-			FL_IS_MODIFIED_u8(layer) ? FL_UNSAVE_u8(layer) : FL_MASTER_u8(layer),
+	{
+		uint8 c = FL_IS_MODIFIED_u8(layer) ? FL_UNSAVE_u8(layer) : FL_MASTER_u8(layer);
+		V_PRINTF(" l: set layer (%d.%d)%c" LB,
+			c / 4, c % 4,
 			FL_IS_MODIFIED_u8(layer) ? '*' : ' ');
+	}
 #endif
 
 #ifdef ENDDEVICE_INPUT

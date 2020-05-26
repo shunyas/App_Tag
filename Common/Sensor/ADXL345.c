@@ -1,11 +1,19 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - 2012 all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
- * Condition to use:
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ * Condition to use: (refer to detailed conditions in Japanese)
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
+ *
+ * 利用条件:
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
+ *     保有しています。
+ *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
+ *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
 
@@ -94,6 +102,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 {
 	u16modeflag = (uint16)i16mode;
 	u16modeflag = ((i16mode&SHAKE) != 0) ? SHAKE : u16modeflag;
+	u16modeflag = ((i16mode&DICE) != 0) ? DICE : u16modeflag;
 
 	uint8 com;
 	if( u16modeflag == NEKOTTER || u16modeflag == SHAKE ){
@@ -265,7 +274,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_FF, 1, &com );
 
 	//	動いていることを判断するための閾値
-	if( u16modeflag&ACTIVE ){
+	if( (u16modeflag&ACTIVE) || u16modeflag == DICE ){
 		if( sParam.u16ThresholdActive != 0 ){
 			u16tempcom = sParam.u16ThresholdActive*10/625;
 			if( 0x00FF < u16tempcom ){
@@ -282,7 +291,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );
 
 	//	動いていないことを判断するための閾値
-	if( u16modeflag&ACTIVE ){
+	if( (u16modeflag&ACTIVE) || u16modeflag == DICE ){
 		if( sParam.u16ThresholdInactive != 0 ){
 			u16tempcom = sParam.u16ThresholdInactive*10/625;
 			if( 0x00FF < u16tempcom ){
@@ -299,7 +308,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_INACT, 1, &com );
 
 	//	動いていないことを判断するための時間(s)
-	if( u16modeflag&ACTIVE ){
+	if( (u16modeflag&ACTIVE) || u16modeflag == DICE ){
 		if( sParam.u16TimeInactive != 0 ){
 			u16tempcom = sParam.u16TimeInactive;
 			if( 0x00FF < u16tempcom ){
@@ -308,7 +317,11 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 				com = (uint8)u16tempcom;
 			}
 		} else {
-			com = 0x02;
+			if( u16modeflag == DICE ){
+				com = 0x01;
+			}else{
+				com = 0x02;
+			}
 		}
 	}else{
 		com = 0x00;
@@ -316,7 +329,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_INACT, 1, &com );
 
 	//	動いている/いないことを判断するための軸
-	if( u16modeflag&ACTIVE ){
+	if( (u16modeflag&ACTIVE) || u16modeflag == DICE ){
 		com = 0x77;
 	}else{
 		com = 0x00;
@@ -336,17 +349,21 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	if( (u16modeflag&SHAKE) != 0 ){
 		com += 0x02;
 	}else{
-		if( u16modeflag&S_TAP ){
-			com += 0x40;
-		}
-		if( u16modeflag&D_TAP ){
-			com += 0x20;
-		}
-		if( u16modeflag&FREEFALL ){
-			com += 0x04;
-		}
-		if( u16modeflag&ACTIVE ){
-			com += 0x18;		//	INACTIVEも割り込みさせる
+		if( u16modeflag == DICE ){
+			com += 0x18;		//	ACTIVEとINACTIVEで割り込みさせる
+		}else{
+			if( u16modeflag&S_TAP ){
+				com += 0x40;
+			}
+			if( u16modeflag&D_TAP ){
+				com += 0x20;
+			}
+			if( u16modeflag&FREEFALL ){
+				com += 0x04;
+			}
+			if( u16modeflag&ACTIVE ){
+				com += 0x18;		//	INACTIVEも割り込みさせる
+			}
 		}
 	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );

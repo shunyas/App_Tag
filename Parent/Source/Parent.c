@@ -1,11 +1,19 @@
 /****************************************************************************
- * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - 2013 all rights reserved.
+ * (C) Mono Wireless Inc. - 2016 all rights reserved.
  *
- * Condition to use:
- *   - The full or part of source code is limited to use for TWE (TOCOS
+ * Condition to use: (refer to detailed conditions in Japanese)
+ *   - The full or part of source code is limited to use for TWE (The
  *     Wireless Engine) as compiled and flash programmed.
  *   - The full or part of source code is prohibited to distribute without
- *     permission from TOCOS.
+ *     permission from Mono Wireless.
+ *
+ * 利用条件:
+ *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
+ *     保有しています。
+ *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
+ *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
+ *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
+ *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
  *
  ****************************************************************************/
 
@@ -873,6 +881,37 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 		}
 		break;
 
+	case PKT_ID_BME280:
+		_C {
+			uint8 u8batt = G_OCTET();
+
+			uint16	u16adc1 = G_BE_WORD();
+			uint16	u16adc2 = G_BE_WORD();
+			int16	i16temp = G_BE_WORD();
+			uint16	u16hum = G_BE_WORD();
+			uint16	u16atmo = G_BE_WORD();
+
+			// センサー情報
+			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:tm=%04d:hu=%04d:at=%04d" LB,
+					DECODE_VOLT(u8batt), u16adc1, u16adc2, i16temp, u16hum, u16atmo);
+
+#ifdef USE_LCD
+			// LCD への出力
+			V_PRINTF_LCD("%03d:%08X:%03d:%02X:B:%04d:%04d:%04d:%04d:%04d\n",
+					u32sec % 1000,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
+					i16temp,
+					u16hum,
+					u16atmo,
+					u16adc1
+					);
+			vLcdRefresh();
+#endif
+		}
+		break;
+
 	case PKT_ID_MPL115A2:
 		_C {
 			uint8 u8batt = G_OCTET();
@@ -1412,6 +1451,58 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 #endif
 	}
 
+	if (sRxPktInfo.u8pkt == PKT_ID_BME280) {
+		uint8 u8batt = G_OCTET();
+		uint16 u16adc1 = G_BE_WORD();
+		uint16 u16adc2 = G_BE_WORD();;
+		int16 i16temp = G_BE_WORD();
+		uint16 u16hum = G_BE_WORD();
+		uint16 u16atmo = G_BE_WORD();
+
+		A_PRINTF( ";"
+				"%d;"			// TIME STAMP
+				"%08X;"			// 受信機のアドレス
+				"%03d;"			// LQI  (0-255)
+				"%03d;"			// 連番
+				"%07x;"			// シリアル番号
+				"%04d;"			// 電源電圧 (0-3600, mV)
+				"%04d;"			// 気温
+				"%04d;"			// 湿度
+				"%04d;"			// adc1
+				"%04d;"			// adc2
+				"%c;"			// パケット識別子
+				"%04d;"			// 気圧
+				LB,
+				u32TickCount_ms / 1000,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+				DECODE_VOLT(u8batt),
+				i16temp,
+				u16hum,
+				u16adc1,
+				u16adc2,
+				'B',
+				u16atmo
+		);
+
+#ifdef USE_LCD
+			// LCD への出力
+			V_PRINTF_LCD("%03d:%08X:%03d:%02X:B:%04d:%04d:%04d:%04d:%04d\n",
+					u32sec % 1000,
+					sRxPktInfo.u32addr_1st,
+					sRxPktInfo.u8lqi_1st,
+					sRxPktInfo.u16fct & 0xFF,
+					i16temp,
+					u16hum,
+					u16atmo,
+					u16adc1
+					);
+			vLcdRefresh();
+#endif
+	}
+
 	if (sRxPktInfo.u8pkt == PKT_ID_STANDARD) {
 		uint8 u8batt = G_OCTET();
 
@@ -1640,6 +1731,24 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			S_BE_WORD(u16adc0);
 			S_BE_WORD(u16adc1);
 			S_BE_WORD(i16temp);
+		}
+		break;
+
+	case PKT_ID_BME280:
+		_C {
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			int16	i16temp = G_BE_WORD();
+			uint16	u16hum = G_BE_WORD();
+			uint16	u16atmo = G_BE_WORD();
+
+			S_OCTET(u8batt);		// batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(i16temp);		//	Result
+			S_BE_WORD(u16hum);		//	Result
+			S_BE_WORD(u16atmo);		//	Result
 		}
 		break;
 

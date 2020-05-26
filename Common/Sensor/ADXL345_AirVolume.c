@@ -28,7 +28,7 @@
 #include "fprintf.h"
 
 #include "sensor_driver.h"
-#include "ADXL345_LowEnergy.h"
+#include "ADXL345_AirVolume.h"
 #include "SMBus.h"
 
 #include "ccitt8.h"
@@ -54,7 +54,7 @@ tsFILE sSerStream;
 #define ADXL345_ADDRESS		(0x53)
 #endif
 
-#define ADXL345_CONVTIME    (10)//(24+2) // 24ms MAX
+#define ADXL345_CONVTIME    (0)//(24+2) // 24ms MAX
 
 #define ADXL345_DATA_NOTYET	(-32768)
 #define ADXL345_DATA_ERROR	(-32767)
@@ -93,7 +93,9 @@ tsFILE sSerStream;
 #define ADXL345_Y	ADXL345_DATAY0
 #define ADXL345_Z	ADXL345_DATAZ0
 
-const uint8 ADXL345_LOWENERGY_AXIS[] = {
+#define READ_FIFO 5
+
+const uint8 ADXL345_AirVolume_AXIS[] = {
 		ADXL345_X,
 		ADXL345_Y,
 		ADXL345_Z
@@ -108,7 +110,7 @@ const uint8 ADXL345_LOWENERGY_AXIS[] = {
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
-PRIVATE void vProcessSnsObj_ADXL345_LowEnergy(void *pvObj, teEvent eEvent);
+PRIVATE void vProcessSnsObj_ADXL345_AirVolume(void *pvObj, teEvent eEvent);
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -121,28 +123,32 @@ PRIVATE void vProcessSnsObj_ADXL345_LowEnergy(void *pvObj, teEvent eEvent);
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vADXL345_LowEnergy_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
+void vADXL345_AirVolume_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
-	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_ADXL345_LowEnergy;
+	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_ADXL345_AirVolume;
 
 	memset((void*)pData, 0, sizeof(tsObjData_ADXL345));
 }
 
-void vADXL345_LowEnergy_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
+void vADXL345_AirVolume_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 	pSnsObj->u8State = E_SNSOBJ_STATE_INACTIVE;
 }
 
 //	センサの設定を記述する関数
-bool_t bADXL345_LowEnergy_Setting()
+bool_t bADXL345_AirVolume_Setting()
 {
 	bool_t bOk = TRUE;
 
-	uint8 com = 0x19;		//	Low Power Mode, 100Hz Sampling frequency
+	uint8 com = 0x1A;		//	100Hz Sampling frequency
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
+	com = 0x08;		//	Start Measuring
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+	bOk &= bSetActive();
+
 	return bOk;
 }
 
@@ -157,7 +163,7 @@ bool_t bADXL345_LowEnergy_Setting()
  * bool_t	fail or success
  *
  ****************************************************************************/
-PUBLIC bool_t bADXL345_LowEnergyReset()
+PUBLIC bool_t bADXL345_AirVolumeReset()
 {
 	bool_t bOk = TRUE;
 	return bOk;
@@ -174,18 +180,14 @@ PUBLIC bool_t bADXL345_LowEnergyReset()
  * void
  *
  ****************************************************************************/
-PUBLIC bool_t bADXL345_LowEnergyStartRead()
+PUBLIC bool_t bADXL345_AirVolumeStartRead()
 {
-
-	uint8 com = 0x08;		//	Start Measuring
-	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
-
-	return bOk;
+	return TRUE;
 }
 
 /****************************************************************************
  *
- * NAME: u16ADXL345_LowEnergyreadResult
+ * NAME: u16ADXL345_AirVolumereadResult
  *
  * DESCRIPTION:
  * Wrapper to read a measurement, followed by a conversion function to work
@@ -200,37 +202,99 @@ PUBLIC bool_t bADXL345_LowEnergyStartRead()
  *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC int16 i16ADXL345_LowEnergyReadResult( uint8 u8axis )
+PUBLIC bool_t b16ADXL345_AirVolumeReadResult( int32* ai32accel )
 {
 	bool_t	bOk = TRUE;
-	int16	i16result=0;
 	uint8	au8data[2];
+	uint8	num;				//	FIFOのデータ数
+	uint8	i;
+	int16	temp;
+	int32	x[33];
+	int32	y[33];
+	int32	z[33];
+	int32	avex = 0;
+	int32	avey = 0;
+	int32	avez = 0;
 
-	//	各軸の読み込み
-	switch( u8axis ){
-		case ADXL345_LOWENERGY_IDX_X:
-			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_X, au8data );
-			break;
-		case ADXL345_LOWENERGY_IDX_Y:
-			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_Y, au8data );
-			break;
-		case ADXL345_LOWENERGY_IDX_Z:
-			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_Z, au8data );
-			break;
-		default:
-			bOk = FALSE;
+	//	FIFOでたまった個数を読み込む
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_STATUS, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &num );
+
+	//	FIFOの中身を全部読む
+	num = (num&0x7f);
+	if( num == READ_FIFO ){
+		//	各軸の読み込み
+		for( i=0; i<num; i++ ){
+			//	X軸
+			bOk &= bGetAxis( ADXL345_AirVolume_IDX_X, au8data );
+			temp = (((au8data[1] << 8) | au8data[0]));
+			x[i] = (int32)temp;
+		}
+		for( i=0; i<num; i++ ){
+			//	Y軸
+			bOk &= bGetAxis( ADXL345_AirVolume_IDX_Y, au8data );
+			temp = (((au8data[1] << 8) | au8data[0]));
+			y[i] = (int32)temp;
+		}
+		for( i=0; i<num; i++ ){
+			//	Z軸
+			bOk &= bGetAxis( ADXL345_AirVolume_IDX_Z, au8data );
+			temp = (((au8data[1] << 8) | au8data[0]));
+			z[i] = (int32)temp;
+		}
+		bOk &= bSetFIFO_Air();
+
+		for( i=0; i<num; i++ ){
+			x[i] = (x[i]<<2);
+			avex += x[i];
+			y[i] = (y[i]<<2);
+			avey += y[i];
+			z[i] = (z[i]<<2);
+			avez += z[i];
+#if 0
+			vfPrintf(& sSerStream, "\n\r%2d:%d,%d,%d %d", i, x[i], y[i], z[i], sum[i] );
+			SERIAL_vFlush(E_AHI_UART_0);
+		}
+		vfPrintf( &sSerStream, "\n\r" );
+#else
+		}
+#endif
+
+		ai32accel[0] = avex/num;
+		ai32accel[1] = avey/num;
+		ai32accel[2] = avez/num;
+	}else{
+		bOk &= bSetFIFO_Air();
+		ai32accel[0] = 0;
+		ai32accel[1] = 0;
+		ai32accel[2] = 0;
 	}
-	i16result = (((au8data[1] << 8) | au8data[0]));
-	i16result = i16result*4/10;			//	1bitあたり4mg  10^-2まで有効
 
-	if (bOk == FALSE) {
-		i16result = SENSOR_TAG_DATA_ERROR;
-	}
+	//	終わり
 
-
-	return i16result;
+    return bOk;
 }
 
+PUBLIC bool_t b16ADXL345_AirVolumeSingleReadResult( int32* ai32accel )
+{
+	bool_t	bOk = TRUE;
+	uint8	au8data[2];
+
+	//	X軸
+	bOk &= bGetAxis( ADXL345_AirVolume_IDX_X, au8data );
+	ai32accel[0] = (((au8data[1] << 8) | au8data[0]));
+	ai32accel[0] = (ai32accel[0]<<2);
+	//	Y軸
+	bOk &= bGetAxis( ADXL345_AirVolume_IDX_Y, au8data );
+	ai32accel[1] = (((au8data[1] << 8) | au8data[0]));
+	ai32accel[1] = (ai32accel[1]<<2);
+	//	Z軸
+	bOk &= bGetAxis( ADXL345_AirVolume_IDX_Z, au8data );
+	ai32accel[2] = (((au8data[1] << 8) | au8data[0]));
+	ai32accel[2] = (ai32accel[2]<<2);
+
+    return bOk;
+}
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
@@ -238,14 +302,66 @@ PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
 {
 	bool_t bOk = TRUE;
 
-	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_LOWENERGY_AXIS[u8axis], 0, NULL );
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_AirVolume_AXIS[u8axis], 0, NULL );
 	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 2, au8data );
 
 	return bOk;
 }
 
+bool_t bSetFIFO_Air( void )
+{
+	//	FIFOの設定をもう一度
+	uint8 com = 0x00 | 0x20 | READ_FIFO;
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+	com = 0xC0 | 0x20 | READ_FIFO;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+	//	有効にする割り込みの設定
+	com = 0x02;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
+	//	終わり
+
+    return bOk;
+}
+
+bool_t bSetActive(void)
+{
+	uint8 com;
+	bool_t bOk = TRUE;
+	//	動いていることを判断するための閾値
+	com = 0x07;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );
+
+	com = 0x60;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 1, &com );
+
+	//	割り込みピンの設定
+	com = 0x10;		//	ACTIVEは別ピン
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_MAP, 1, &com );
+
+	//	有効にする割り込みの設定
+	com = 0x10;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
+
+    return bOk;
+}
+
+uint8 u8Read_Interrupt_Air( void )
+{
+	uint8	u8source;
+	bool_t bOk = TRUE;
+
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, 0x30, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+
+	if(!bOk){
+		u8source = 0xFF;
+	}
+
+	return u8source;
+}
+
 // the Main loop
-PRIVATE void vProcessSnsObj_ADXL345_LowEnergy(void *pvObj, teEvent eEvent) {
+PRIVATE void vProcessSnsObj_ADXL345_AirVolume(void *pvObj, teEvent eEvent) {
 	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
 	tsObjData_ADXL345 *pObj = (tsObjData_ADXL345 *)pSnsObj->pvData;
 
@@ -298,9 +414,10 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 	case E_SNSOBJ_STATE_MEASURING:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_X] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Y] = SENSOR_TAG_DATA_ERROR;
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Z] = SENSOR_TAG_DATA_ERROR;
+			pObj->u8Interrupt = u8Interrupt;
+			pObj->ai32Result[ADXL345_AirVolume_IDX_X] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai32Result[ADXL345_AirVolume_IDX_Y] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai32Result[ADXL345_AirVolume_IDX_Z] = SENSOR_TAG_DATA_ERROR;
 			pObj->u8TickWait = ADXL345_CONVTIME;
 
 			pObj->bBusy = TRUE;
@@ -310,9 +427,9 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
 #else
-			if (!bADXL345_LowEnergyStartRead()) { // kick I2C communication
-				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
-			}
+//			if (!bADXL345_AirVolumeStartRead()) { // kick I2C communication
+//				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+//			}
 #endif
 			pObj->u8TickCount = 0;
 			break;
@@ -323,12 +440,11 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 
 		// wait until completion
 		if (pObj->u8TickCount > pObj->u8TickWait) {
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_X] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_X);
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Y] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_Y);
-			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Z] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_Z);
-
-			uint8 com = 0x00;		//	End Measuring
-			bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+			if( (pObj->u8Interrupt&0x02) != 0 ){
+				b16ADXL345_AirVolumeReadResult( pObj->ai32Result );
+			}else{
+				b16ADXL345_AirVolumeSingleReadResult( pObj->ai32Result );
+			}
 
 			// data arrival
 			pObj->bBusy = FALSE;
