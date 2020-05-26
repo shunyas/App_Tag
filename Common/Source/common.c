@@ -40,6 +40,7 @@
 #include "ToCoNet.h"
 
 #ifdef ENDDEVICE_INPUT
+#include "ccitt8.h"
 #include "EndDevice_Input.h"
 #endif
 
@@ -93,9 +94,10 @@ void vDispInfo(tsFILE *psSerStream, tsToCoNet_NwkLyTr_Context *pc) {
 	}
 }
 
+#ifdef ENDDEVICE_INPUT
 /**
  *
- * 親機に対してテスト送信する
+ * 親機に対して送信する
  *
  * @param pNwk ネットワークコンテキスト
  * @param pu8Data ペイロード
@@ -103,31 +105,120 @@ void vDispInfo(tsFILE *psSerStream, tsToCoNet_NwkLyTr_Context *pc) {
  *
  */
 bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Len) {
-	static uint8 u8Seq;
-	tsTxDataApp sTx;
-	memset(&sTx, 0, sizeof(sTx));
 
-	sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
-	sTx.u32SrcAddr = ToCoNet_u32GetSerial(); // Transmit using Long address
-	sTx.u8Cmd = TOCONET_PACKET_CMD_APP_DATA; // data packet.
-
-	sTx.u8Seq = u8Seq++;
-	sTx.u8CbId = sTx.u8Seq;
-
-	sTx.u8Retry = 3; // one application retry
-	sTx.u16RetryDur = 33; // retry every 32ms
-
-	if (u8Len == 0) {
-		// assume null terminated string.
-		u8Len = strlen((char*)pu8Data);
+	// 暗号化鍵の登録
+	if (IS_APPCONF_OPT_SECURE()) {
+		bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
+		V_PRINTF(LB "*** Register AES key (%d) ***", bRes);
 	}
 
-	memcpy(sTx.auData, pu8Data, u8Len);
-	sTx.u8Len = u8Len;
+	// 初期化後速やかに送信要求
+	V_PRINTF(LB"[SNS_COMP/TX]");
+	tsTxDataApp sTx;
+	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
+	uint8 *q =  sTx.auData;
+
+	sTx.u32SrcAddr = ToCoNet_u32GetSerial();
+
+	if (IS_APPCONF_OPT_SECURE()) {
+		sTx.bSecurePacket = TRUE;
+	}
+
+	if (IS_APPCONF_OPT_TO_ROUTER()) {
+		// ルータがアプリ中で一度受信して、ルータから親機に再配送
+		sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
+	} else {
+		// ルータがアプリ中では受信せず、単純に中継する
+		sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
+	}
+
+	// ペイロードの準備
+	S_OCTET('T');
+	S_OCTET(sAppData.sFlash.sData.u8id);
+	S_BE_WORD(sAppData.u16frame_count);
+
+	if( sAppData.sFlash.sData.u8mode == 0xA1 || sAppData.sFlash.sData.u8mode == 0xA2 ){
+		S_OCTET(0x35);	// ADXL345 LowEnergy Mode の時、普通のADXL345として送る
+	}else{
+		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子
+	}
+
+	//	センサ固有のデータ
+	memcpy(q,pu8Data,u8Len);
+	q += u8Len;
+
+	sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
+	sTx.u8Len = q - sTx.auData; // パケットのサイズ
+	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
+	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
+	sTx.u8Retry = sAppData.u8Retry;
+#ifdef SWING
+	sTx.u16RetryDur = 0;
+#endif
 
 	return ToCoNet_Nwk_bTx(pNwk, &sTx);
 }
 
+/**
+ *
+ * 親機に対して送信する
+ *
+ * @param pNwk ネットワークコンテキスト
+ * @param pu8Data ペイロード
+ * @param u8Len ペイロード長
+ *
+ */
+bool_t bTransmitToAppTwelite( uint8 *pu8Data, uint8 u8Len )
+{
+	//	DO+PWMの設定値が7バイトでない場合送信失敗にする。
+	if( u8Len != 7 ){
+		return FALSE;
+	}
+
+	tsTxDataApp sTx;
+	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
+
+	sTx.u32SrcAddr = ToCoNet_u32GetSerial();
+
+	uint8* q = sTx.auData;
+	uint8 crc = u8CCITT8((uint8*) &sToCoNet_AppContext.u32AppId, 4);
+
+	S_OCTET(crc);									//
+	S_OCTET(0x01);									// プロトコルバージョン
+	if(sAppData.sFlash.sData.u8id == 0){
+		S_OCTET(0x78);								// アプリケーション論理アドレス
+	}else{
+		S_OCTET(sAppData.sFlash.sData.u8id);		// アプリケーション論理アドレス
+	}
+	S_BE_DWORD(ToCoNet_u32GetSerial());				// シリアル番号
+	S_OCTET(0x00);									// 宛先
+	S_BE_WORD( (u32TickCount_ms & 0x7FFF)+0x8000);	// タイムスタンプ
+	S_OCTET(0);										// 中継フラグ
+	S_BE_WORD(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);	//	電源電圧
+	S_OCTET(0);										// 温度(ダミー)
+
+	//	DI+AI
+	memcpy(q,pu8Data,u8Len);
+	q += u8Len;
+
+	sTx.u8Cmd = 0x02+0; // パケット種別
+	// 送信する
+	sTx.u32DstAddr = TOCONET_MAC_ADDR_BROADCAST; // ブロードキャスト
+	sTx.u32SrcAddr = sToCoNet_AppContext.u16ShortAddress;
+	sTx.bAckReq = FALSE;
+	sTx.u8Retry = sAppData.u8Retry;
+
+	sTx.u8Len = q - sTx.auData; // パケットのサイズ
+	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
+	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
+
+#ifdef SWING
+	sTx.u16RetryDur = 0;
+#endif
+
+	return ToCoNet_bMacTxReq(&sTx);
+}
+#endif
 
 /** @ingroup MASTER
  * スリープの実行

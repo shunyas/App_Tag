@@ -144,7 +144,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
  */
 PRSEV_HANDLER_DEF(E_STATE_APP_FAILED, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
-		if( bPortRead(PORT_CONF2) ){	//	インタラクティブモード
+		if( bPortRead(u8ConfPort) ){	//	インタラクティブモード
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_INTERACTIVE);
 		}
 		else{							//	スリープ

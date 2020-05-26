@@ -34,7 +34,7 @@
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
 static void vProcessADXL345_AirVolume(teEvent eEvent);
-static void vSendToAppTweLiteReq();
+static bool_t bSendToAppTweLiteReq();
 static bool_t bSendToSampMonitor();
 
 static uint8 u8sns_cmplt = 0;
@@ -434,11 +434,22 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			}
 			V_PRINTF( LB"deg = %d : Duty = %d", deg, u16v );
 
-			if( IS_APPCONF_OPT_APP_TWELITE() ){
-				vSendToAppTweLiteReq();		//	標準アプリに送信
-			}else{
-				bSendToSampMonitor();		//	Samp_Monitorに送信
+			sAppData.u16frame_count++;
+
+			bool_t bOk;
+			if( IS_APPCONF_OPT_APP_TWELITE() ){		//	App_Twelites
+				bOk = bSendToAppTweLiteReq();
+			}else{									//	Samp_Monitor
+				bOk = bSendToSampMonitor();
 			}
+
+			if(bOk){
+				ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+				V_PRINTF(LB"TxOk");
+			}else{
+				V_PRINTF(LB"TxFl");
+			}
+
 
 			//	点滅用カウンタ
 			if( OverFlag || UnderFlag ){
@@ -690,12 +701,8 @@ static void vProcessADXL345_AirVolume(teEvent eEvent) {
  */
 static void vStoreSensorValue() {
 	// センサー値の保管
-	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
-#ifdef USE_TEMP_INSTDOF_ADC2
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
-#else
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
-#endif
+	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
+	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする
@@ -707,7 +714,7 @@ static void vStoreSensorValue() {
 	vPortSetSns(FALSE);
 }
 
-static void vSendToAppTweLiteReq(){
+static bool_t bSendToAppTweLiteReq(){
 	// 初期化後速やかに送信要求
 	V_PRINTF(LB"[SNS_COMP/TX]");
 
@@ -803,8 +810,7 @@ static void vSendToAppTweLiteReq(){
 	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
 	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
 
-	ToCoNet_bMacTxReq(&sTx);
-	ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+	return ToCoNet_bMacTxReq(&sTx);
 }
 
 bool_t bSendToSampMonitor()
@@ -820,5 +826,5 @@ bool_t bSendToSampMonitor()
 	S_BE_WORD(0x0000);
 	S_OCTET(0xFB);
 
-	return bSendMessage( au8Data, q-au8Data );
+	return bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data );
 }

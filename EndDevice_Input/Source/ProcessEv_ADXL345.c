@@ -35,7 +35,7 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
 static void vProcessADXL345(teEvent eEvent);
 
-static void vSendToAppTweLite();
+static bool_t bSendToAppTweLite();
 static bool_t bSendToSampMonitor(void);
 
 static uint8 u8PlayDice( int16* accel );
@@ -58,7 +58,7 @@ static int16 i16AveAccel = 0;
 static bool_t bFaceUp = TRUE;
 static bool_t bNoChangePkt = FALSE;
 
-static uint8 au8TmpData[MAX_TX_APP_PAYLOAD];
+static uint8 au8TmpData[7];
 static uint8 u8TmpLength = 0;
 
 static tsSnsObj sSnsObj;
@@ -344,6 +344,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 
 			bFirst = FALSE;
 
+			bool_t bOk;
 			if( IS_APPCONF_OPT_APP_TWELITE() ){		//	App_Twelites
 				if( sAppData.sFlash.sData.i16param&DICE ){
 					if( bIS_INACTIVE() && sAppData.bWakeupByButton ){
@@ -352,11 +353,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 						bNoChangePkt = FALSE;
 					}
 				}
-				vSendToAppTweLite();
+				bOk = bSendToAppTweLite();
 			}else{									//	Samp_Monitor
-				if( !bSendToSampMonitor() ){
-					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
-				}
+				bOk = bSendToSampMonitor();
 			}
 
 #ifdef LITE2525A
@@ -364,6 +363,14 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 #else
 			vPortSetLo(LED);
 #endif
+			if(bOk){
+				ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+				V_PRINTF(LB"TxOk");
+			}else{
+				V_PRINTF(LB"TxFl");
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+			}
+
 			V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 		}
 
@@ -632,12 +639,8 @@ static void vProcessADXL345(teEvent eEvent) {
  */
 static void vStoreSensorValue() {
 	// センサー値の保管
-	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
-#ifdef USE_TEMP_INSTDOF_ADC2
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
-#else
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
-#endif
+	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
+	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする
@@ -646,19 +649,15 @@ static void vStoreSensorValue() {
 	}
 }
 
-static void vSendToAppTweLite(){
+static bool_t bSendToAppTweLite(){
 	static uint8 u8Analog = 0;
 	static bool_t bBack = FALSE;
 	// 初期化後速やかに送信要求
 	V_PRINTF(LB"[SNS_COMP/TX]");
 
-	tsTxDataApp sTx;
-	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
+	uint8	au8Data[7];
 
-	sTx.u32SrcAddr = ToCoNet_u32GetSerial();
-
-	uint8* q = sTx.auData;
-	uint8 crc = u8CCITT8((uint8*) &sToCoNet_AppContext.u32AppId, 4);
+	uint8* q = au8Data;
 
 	if( bNoChangePkt ){
 		memcpy( q, au8TmpData, u8TmpLength );
@@ -666,15 +665,6 @@ static void vSendToAppTweLite(){
 		V_PRINTF(LB"Send Same Pakket.");
 	}else{
 		sAppData.u16frame_count++; // シリアル番号を更新する
-		S_OCTET(crc);								//
-		S_OCTET(0x01);								// プロトコルバージョン
-		S_OCTET(0x78);								// アプリケーション論理アドレス
-		S_BE_DWORD(ToCoNet_u32GetSerial());			// シリアル番号
-		S_OCTET(0x00);								// 宛先
-		S_BE_WORD(u32TickCount_ms & 0xFFFF);		// タイムスタンプ
-		S_OCTET(0);									// 中継フラグ
-		S_BE_WORD(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);	//	電源電圧
-		S_OCTET(0);									// 温度(ダミー)
 
 		if( sAppData.sFlash.sData.i16param&DICE ){
 			uint8 u8Dice = u8PlayDice( sObjADXL345.ai16Result );
@@ -874,22 +864,11 @@ static void vSendToAppTweLite(){
 			u8LSBs |= ((sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT] << 6) & 0xC0);
 			S_OCTET(u8LSBs);
 		}
-		u8TmpLength = q - sTx.auData;
-		memcpy( au8TmpData, sTx.auData, u8TmpLength );
+		u8TmpLength = q-au8Data;
+		memcpy( au8TmpData, au8Data, u8TmpLength );
 	}
-	sTx.u8Cmd = 0x02+0; // パケット種別
-	// 送信する
-	sTx.u32DstAddr = TOCONET_MAC_ADDR_BROADCAST; // ブロードキャスト
-	sTx.u32SrcAddr = sToCoNet_AppContext.u16ShortAddress;
-	sTx.bAckReq = FALSE;
-	sTx.u8Retry = sAppData.u8Retry;
 
-	sTx.u8Len = q - sTx.auData; // パケットのサイズ
-	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
-	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
-
-	ToCoNet_bMacTxReq(&sTx);
-	ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+	return bTransmitToAppTwelite( au8Data, q-au8Data );
 }
 
 static bool_t bSendToSampMonitor( void ){
@@ -898,11 +877,11 @@ static bool_t bSendToSampMonitor( void ){
 	static bool_t bBack = FALSE;
 
 	if( bNoChangePkt ){
-		sAppData.u16frame_count--; // 更新しない
 		memcpy( q, au8TmpData, u8TmpLength );
 		q += u8TmpLength;
 		V_PRINTF(LB"Send Same Pakket.");
 	}else{
+		sAppData.u16frame_count++;
 		S_OCTET(sAppData.sSns.u8Batt);
 		S_BE_WORD(sAppData.sSns.u16Adc1);
 		S_BE_WORD(sAppData.sSns.u16Adc2);
@@ -996,7 +975,7 @@ static bool_t bSendToSampMonitor( void ){
 		memcpy( au8TmpData, au8Data, u8TmpLength );
 	}
 
-	return bSendMessage( au8Data, q-au8Data );
+	return bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data );
 
 }
 

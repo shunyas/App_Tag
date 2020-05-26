@@ -71,6 +71,8 @@ extern "C" {
 #define DEFAULT_SENSOR		0x35
 #elif CNFMST
 #define DEFAULT_SENSOR		0x35
+#elif SWING
+#define DEFAULT_SENSOR		0xFD
 #else
 #define DEFAULT_SENSOR		0x10
 #endif
@@ -114,7 +116,12 @@ extern "C" {
 #define DIO_BUTTON (PORT_INPUT1)         // DI1
 #define DIO_VOLTAGE_CHECKER (PORT_OUT1)  // DO1: 始動後速やかに LO になる
 #define DIO_SUPERCAP_CONTROL (PORT_OUT2) // DO2: SUPER CAP の電圧が上昇すると LO に設定
-#define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
+//#ifdef SWING
+//#define DIO_SNS_POWER (16)        // DO3: センサー制御用(稼働中だけLOになる)
+//#else
+//#define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
+//#endif
+
 
 #ifdef LITE2525A
 #define LED (5)

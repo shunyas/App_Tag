@@ -21,24 +21,25 @@
 
 #include "utils.h"
 
+#include "ccitt8.h"
+
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
 #include "sensor_driver.h"
-#include "L3GD20.h"
+#include "ADXL345.h"
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
-static void vProcessL3GD20(teEvent eEvent);
-static uint8 readInput();
+static void vProcessADXL345_FIFO(teEvent eEvent);
 static uint8 u8sns_cmplt = 0;
 
 static tsSnsObj sSnsObj;
-static tsObjData_L3GD20 sObjL3GD20;
+static tsObjData_ADXL345 sObjADXL345;
 
 enum {
 	E_SNS_ADC_CMP_MASK = 1,
-	E_SNS_L3GD20_CMP = 2,
+	E_SNS_ADXL345_CMP = 2,
 	E_SNS_ALL_CMP = 3
 };
 
@@ -46,6 +47,7 @@ enum {
  * ADC 計測をしてデータ送信するアプリケーション制御
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	static bool_t bFirst = TRUE;
 	if (eEvent == E_EVENT_START_UP) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
@@ -57,6 +59,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			V_PRINTF(LB "*** Cold starting");
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
+			// ADXL345 の初期化
 		}
 
 		// RC クロックのキャリブレーションを行う
@@ -65,23 +68,28 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// センサーがらみの変数の初期化
 		u8sns_cmplt = 0;
 
-		// L3GD20 の初期化
-		vL3GD20_Init( &sObjL3GD20, &sSnsObj, sAppData.sFlash.sData.i16param );
+		vADXL345_FIFO_Init( &sObjADXL345, &sSnsObj );
+		if( bFirst ){
+			V_PRINTF(LB "*** ADXL345 Setting...");
+			bFirst = FALSE;
+			bADXL345_FIFO_Setting();
+		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等
-			u8sns_cmplt |= E_SNS_L3GD20_CMP;
-			V_PRINTF(LB "*** L3GD20 comm err?");
+			u8sns_cmplt |= E_SNS_ADXL345_CMP;
+			V_PRINTF(LB "*** ADXL345 comm err?");
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 			return;
 		}
 
-		// ADC の取得
+			// ADC の取得
 		vADC_WaitInit();
 		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
 
 		// RUNNING 状態
 		ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+
 	} else {
 		V_PRINTF(LB "*** unexpected state.");
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
@@ -92,20 +100,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		// 短期間スリープからの起床をしたので、センサーの値をとる
 	if ((eEvent == E_EVENT_START_UP) && (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK)) {
 		V_PRINTF("#");
-		vProcessL3GD20(E_EVENT_START_UP);
-	}
-
-	// ２回スリープすると完了
-	if (u8sns_cmplt != E_SNS_ALL_CMP && (u8sns_cmplt & E_SNS_ADC_CMP_MASK)) {
-		// ADC 完了後、この状態が来たらスリープする
-		pEv->bKeepStateOnSetAll = TRUE; // スリープ復帰の状態を維持
-
-		vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
-		vAHI_DioWakeEnable(0, 0);
-
-		// スリープを行うが、WAKE_TIMER_0 は定周期スリープのためにカウントを続けているため
-		// 空いている WAKE_TIMER_1 を利用する
-		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 50, FALSE, FALSE); // PERIODIC RAM OFF SLEEP USING WK1
+		vProcessADXL345_FIFO(E_EVENT_START_UP);
 	}
 
 	// 送信処理に移行
@@ -139,29 +134,40 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 		}
 
-		uint8 au8Data[12];
-		uint8* q = au8Data;
+		if( sAppData.bWakeupByButton ){
+			uint8	i;
+			uint8	au8Data[91];
+			uint8*	q = au8Data;
+			S_OCTET(sAppData.sSns.u8Batt);
+			S_BE_WORD(sAppData.sSns.u16Adc1);
+			S_BE_WORD(sAppData.sSns.u16Adc2);
+			S_BE_WORD(sObjADXL345.ai16ResultX[0]);
+			S_BE_WORD(sObjADXL345.ai16ResultY[0]);
+			S_BE_WORD(sObjADXL345.ai16ResultZ[0]);
+			S_OCTET( 0xFA );
+			S_OCTET( 14 );
+			for( i=1; i<14; i++ ){
+				S_BE_WORD(sObjADXL345.ai16ResultX[i]);
+				S_BE_WORD(sObjADXL345.ai16ResultY[i]);
+				S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
+			}
 
-		S_OCTET(sAppData.sSns.u8Batt);
-		S_BE_WORD(sAppData.sSns.u16Adc1);
-		S_BE_WORD(sAppData.sSns.u16Adc2);
-		S_BE_WORD(sObjL3GD20.ai16Result[L3GD20_IDX_X]);
-		S_BE_WORD(sObjL3GD20.ai16Result[L3GD20_IDX_Y]);
-		S_BE_WORD(sObjL3GD20.ai16Result[L3GD20_IDX_Z]);
+			sAppData.u16frame_count++;
 
-		/*	DIの入力状態を取得	*/
-		uint8 DI_Bitmap = readInput();
-		S_OCTET( DI_Bitmap );
-
-		sAppData.u16frame_count++;
-		if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
-			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
-			V_PRINTF(LB"TxOk");
-		} else {
-			V_PRINTF(LB"TxFl");
+			if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
+			} else {
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
+			}
+		}else{
+			V_PRINTF(LB"First");
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 		}
 
+#ifdef LITE2525A
+		vPortSetHi(LED);
+#else
+		vPortSetLo(LED);
+#endif
 		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 	}
 
@@ -182,17 +188,25 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_PRINTF(LB"! Sleeping...");
 		V_FLUSH();
 
-		pEv->bKeepStateOnSetAll = FALSE; // スリープ復帰の状態を維持
-
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
 		// センサー用の電源制御回路を Hi に戻す
 		vPortSetSns(FALSE);
 
-		// 周期スリープに入る
-		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒
-		vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
+#ifdef LITE2525A
+		vPortSetLo(LED);
+#else
+		vPortSetHi(LED);
+#endif
+
+		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // ENABLE DIO WAKE SOURCE
+		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
+		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
+
+		u8Read_Interrupt();
+		//vAHI_Sleep(E_AHI_SLEEP_OSCOFF_RAMON);
+		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
 	}
 }
 
@@ -256,7 +270,7 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
-		vProcessL3GD20(E_EVENT_TICK_TIMER);
+		vProcessADXL345_FIFO(E_EVENT_TICK_TIMER);
 		break;
 
 	case E_AHI_DEVICE_ANALOGUE:
@@ -346,12 +360,12 @@ static tsCbHandler sCbHandler = {
 /**
  * アプリケーション初期化
  */
-void vInitAppL3GD20() {
+void vInitAppADXL345_FIFO() {
 	psCbHandler = &sCbHandler;
 	pvProcessEv1 = vProcessEvCore;
 }
 
-static void vProcessL3GD20(teEvent eEvent) {
+static void vProcessADXL345_FIFO(teEvent eEvent) {
 	if (bSnsObj_isComplete(&sSnsObj)) {
 		 return;
 	}
@@ -359,12 +373,12 @@ static void vProcessL3GD20(teEvent eEvent) {
 	// イベントの処理
 	vSnsObj_Process(&sSnsObj, eEvent); // ポーリングの時間待ち
 	if (bSnsObj_isComplete(&sSnsObj)) {
-		u8sns_cmplt |= E_SNS_L3GD20_CMP;
+		u8sns_cmplt |= E_SNS_ADXL345_CMP;
 
-		V_PRINTF(LB"!L3GD20: X : %d, Y : %d, Z : %d",
-			sObjL3GD20.ai16Result[L3GD20_IDX_X],
-			sObjL3GD20.ai16Result[L3GD20_IDX_Y],
-			sObjL3GD20.ai16Result[L3GD20_IDX_Z]
+		V_PRINTF(LB"!ADXL345: X : %d, Y : %d, Z : %d",
+			sObjADXL345.ai16ResultX[0],
+			sObjADXL345.ai16ResultY[0],
+			sObjADXL345.ai16ResultZ[0]
 		);
 
 		// 完了時の処理
@@ -372,7 +386,6 @@ static void vProcessL3GD20(teEvent eEvent) {
 			ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
 		}
 	}
-
 }
 
 /**
@@ -380,37 +393,16 @@ static void vProcessL3GD20(teEvent eEvent) {
  */
 static void vStoreSensorValue() {
 	// センサー値の保管
-	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];
+	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
+#ifdef USE_TEMP_INSTDOF_ADC2
+	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
+#else
+	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
+#endif
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする
 	if (sAppData.sSns.u16Adc1 >= VOLT_SUPERCAP_CONTROL) {
 		vPortSetLo(DIO_SUPERCAP_CONTROL);
 	}
-}
-
-/*
- * DIの状態をBitMapにして返す
- */
-static uint8 readInput(void)
-{
-	uint8	bitmap = 0;
-	bool_t	btn;
-	uint8	i;
-
-	uint8 au8PortTbl_DIn[4] = {
-		PORT_INPUT1,
-		PORT_INPUT2,
-		PORT_INPUT3,
-		PORT_INPUT4
-	};
-
-	for( i=0; i<4; i++ ){
-		btn = bPortRead(au8PortTbl_DIn[i]);
-		if( btn ){
-			bitmap |= ( 1UL<<i );
-		}
-	}
-	return bitmap;
 }

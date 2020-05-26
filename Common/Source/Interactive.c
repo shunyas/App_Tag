@@ -355,7 +355,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 				 LB "   XXY XX=Layer(1-63)"
 				 LB "        Y=MaxSubLayer(0-2)"
 				 LB "Input :");
-		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 3,
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 3,
 				E_APPCONF_LAYER);
 		break;
 #endif
@@ -628,11 +628,13 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 #ifdef ROUTER
 	case E_APPCONF_LAYER:
 		_C {
-			uint32 u32val = u32string2hex(pu8str, u8idx);
+			uint32 u32val = u32string2dec(pu8str, u8idx);
 			V_PRINTF(LB"-> ");
 
-			uint8 u8layer = u32val >> 4;
-			uint8 u8subl = u32val & 0xF;
+//			uint8 u8layer = u32val >> 4;
+//			uint8 u8subl = u32val & 0xF;
+			uint8 u8layer = u32val/10;
+			uint8 u8subl = u32val%10;
 
 			if (u8layer >= 1 && u8layer <= 63 && u8subl <= 3) {
 				sConfig_UnSaved.u8layer = u8layer * 4 + u8subl;

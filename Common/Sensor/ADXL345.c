@@ -50,16 +50,6 @@ extern tsFILE sDebugStream;
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define ADXL345_X	ADXL345_DATAX0
-#define ADXL345_Y	ADXL345_DATAY0
-#define ADXL345_Z	ADXL345_DATAZ0
-
-const uint8 ADXL345_AXIS[] = {
-		ADXL345_X,
-		ADXL345_Y,
-		ADXL345_Z
-};
-
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -70,10 +60,16 @@ const uint8 ADXL345_AXIS[] = {
 /****************************************************************************/
 PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent);
+PRIVATE bool_t bSetFIFO( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
+uint8 ADXL345_AXIS[3] = {
+		ADXL345_X,
+		ADXL345_Y,
+		ADXL345_Z
+};
 
 /****************************************************************************/
 /***        Local Variables                                               ***/
@@ -369,7 +365,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
 
 	if( u16modeflag == NEKOTTER || u16modeflag == SHAKE ){
-		com = 0xC0 | 0x20 | READ_FIFO;
+		com = 0xC0 | 0x20 | READ_FIFO_SHAKE;
 	}else{
 		com = 0x00;
 	}
@@ -623,12 +619,12 @@ uint8 u8Read_Interrupt( void )
 	return u8source;
 }
 
-bool_t bSetFIFO( void )
+PRIVATE bool_t bSetFIFO( void )
 {
 	//	FIFOの設定をもう一度
-	uint8 com = 0x00 | 0x20 | READ_FIFO;
+	uint8 com = 0x00 | 0x20 | READ_FIFO_SHAKE;
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
-	com = 0xC0 | 0x20 | READ_FIFO;
+	com = 0xC0 | 0x20 | READ_FIFO_SHAKE;
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	//	終わり
 

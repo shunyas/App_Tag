@@ -147,12 +147,16 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		S_BE_WORD(sObjSHT21.ai16Result[SHT21_IDX_TEMP]);
 		S_BE_WORD(sObjSHT21.ai16Result[SHT21_IDX_HUMID]);
 
-		if ( bSendMessage( au8Data, q-au8Data ) ) {
+		sAppData.u16frame_count++;
+		if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
+			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 #ifdef TWX0003
 			vPortSetLo(PORT_KIT_LED1);
 			vPortAsOutput(PORT_KIT_LED1);
 #endif
+			V_PRINTF(LB"TxOk");
 		} else {
+			V_PRINTF(LB"TxFl");
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 		}
 
@@ -378,12 +382,8 @@ static void vProcessSHT21(teEvent eEvent) {
  */
 static void vStoreSensorValue() {
 	// センサー値の保管
-	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
-#ifdef USE_TEMP_INSTDOF_ADC2
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
-#else
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
-#endif
+	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
+	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする

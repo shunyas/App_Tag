@@ -32,7 +32,10 @@ extern const uint32 u32DioPortWakeUp;
 void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep);
 void vResetWithMsg(tsFILE *psSerStream, string str);
 
+#ifdef ENDDEVICE_INPUT
 bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Len);
+bool_t bTransmitToAppTwelite( uint8 *pu8Data, uint8 u8Len );
+#endif
 
 bool_t bRegAesKey(uint32 u32seed);
 
@@ -55,7 +58,7 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
 #define PKT_ID_ADXL345_LOWENERGY 0xA1
-//#define PKT_ID_ADXL345_AIRVOLUME 0xA2
+#define PKT_ID_SWING 0xFD
 #define PKT_ID_BUTTON 0xFE
 
 /*

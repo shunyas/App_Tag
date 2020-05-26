@@ -1,7 +1,9 @@
 VERSION_MAIN = 1
 VERSION_SUB  = 6
-VERSION_VAR  = 1
+VERSION_VAR  = 3
 
+# 1.6.3 TWE-EH-SWINGに対応
+# 1.6.2 ADXL34xのFIFOモードの追加
 # 1.6.1 ADXL345のAirVolumeとLowEnergyモードの番号を変更
 # 1.6.0 AirVolume機能を追加
 # 1.5.4 BME280 対応、その他修正

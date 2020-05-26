@@ -45,7 +45,7 @@ extern "C" {
 #define ADXL345_ADDRESS		(0x53)
 #endif
 
-#define ADXL345_CONVTIME    (0)//(24+2) // 24ms MAX
+#define ADXL345_CONVTIME    (0)
 
 #define ADXL345_DATA_NOTYET	(-32768)
 #define ADXL345_DATA_ERROR	(-32767)
@@ -96,11 +96,24 @@ extern "C" {
 #define AIRVOLUME			128
 #define NEKOTTER			256
 #define LOWENERGY			512
+#define FIFO				1024
 
 #define READ_FIFO 12
+#define READ_FIFO_SHAKE 5
 
 #define TH_ACCEL 120
 #define TH_COUNT 0
+
+#define ADXL345_X	ADXL345_DATAX0
+#define ADXL345_Y	ADXL345_DATAY0
+#define ADXL345_Z	ADXL345_DATAZ0
+
+#define GetAxis(c, data) \
+{\
+	c &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_DATAX0, 0, NULL );\
+	c &= bSMBusSequentialRead( ADXL345_ADDRESS, 6, data );\
+}
+
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -111,6 +124,9 @@ typedef struct {
 
 	// data
 	int16	ai16Result[3];
+	int16	ai16ResultX[16];
+	int16	ai16ResultY[16];
+	int16	ai16ResultZ[16];
 	uint8	u8Interrupt;
 
 	// working
@@ -124,22 +140,32 @@ typedef struct {
 /****************************************************************************/
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
+// normal
 void vADXL345_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
 bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink );
-void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
 
 PUBLIC bool_t bADXL345reset();
 PUBLIC bool_t bADXL345startRead();
 PUBLIC int16 i16ADXL345readResult( uint8 u8axis );
 PUBLIC bool_t bNekotterreadResult( int16* ai16accel );
 PUBLIC bool_t bShakereadResult( int16* ai16accel );
+
+// fifo
+void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
+bool_t bADXL345_FIFO_Setting();
+
+PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int16* ai16accelz );
+
+//
+void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
 uint8 u8Read_Interrupt( void );
-bool_t bSetFIFO( void );
+
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
 extern uint8 u8Interrupt;
+extern uint8 ADXL345_AXIS[3];
 
 #if defined __cplusplus
 }

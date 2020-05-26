@@ -88,7 +88,7 @@ tsCbHandler *psCbHandler = NULL;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 static void vInitHardware(int f_warm_start);
-#if !(defined(TWX0003) || defined(CNFMST))
+#if !(defined(TWX0003) || defined(CNFMST) || defined(SWING))
 static void vInitPulseCounter();
 #endif
 static void vInitADC();
@@ -112,6 +112,12 @@ tsSerialPortSetup sSerPort;
 
 uint8 u8Interrupt;
 uint8 u8PowerUp; // 0x01:from Deep
+
+uint8 u8ConfPort  = PORT_CONF2;
+
+uint8 u8ADCPort[2];
+
+uint8 DIO_SNS_POWER = 0;
 
 void *pvProcessEv1, *pvProcessEv2;
 void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
@@ -149,6 +155,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
     		sAppData.bWakeupByButton = TRUE;
 		}
 
+
 		// Module Registration
 		ToCoNet_REG_MOD_ALL();
 	} else {
@@ -184,6 +191,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
 #endif
 
+#ifndef SWING
 		//	送信ステータスなどのLEDのための出力
 #ifdef LITE2525A
 		vPortSetLo(LED);
@@ -191,6 +199,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortSetHi(LED);
 #endif
 		vPortAsOutput(LED);
+#endif
 
 		// アプリケーション保持構造体の初期化
 		memset(&sAppData, 0x00, sizeof(sAppData));
@@ -208,15 +217,65 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
 		}
 
+
+
+		// M2がLoなら、設定モードとして動作する
+#ifdef CNFMST
+		sAppData.bConfigMode = TRUE;
+#else
+#ifdef SWING
+		u8ConfPort = 16;		// SCL
+#endif
+		vPortAsInput(u8ConfPort);
+		if( !u8PowerUp ){
+			if( !(IS_APPCONF_OPT_PASS_SETTINGS()) || bPortRead(u8ConfPort) ){
+				sAppData.bConfigMode = TRUE;
+			}
+		}
+#ifdef SWING
+		u8ConfPort = 17;		// SDA
+		vPortAsInput(u8ConfPort);
+		if( bPortRead(u8ConfPort) &&
+			sAppData.sFlash.sData.u8mode == PKT_ID_SWING &&
+			!sAppData.bConfigMode ){
+			sAppData.sFlash.sData.u8mode = PKT_ID_LM61;
+		}
+		vPortDisablePullup(u8ConfPort);
+#endif
+#endif
+
 		// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
 #ifndef TWX0003
-		vPortSetSns(TRUE);
-		vPortAsOutput(DIO_SNS_POWER);
-		vPortDisablePullup(DIO_SNS_POWER);
+#ifdef SWING
+		if( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50 ){
+			DIO_SNS_POWER = 1;
+		}else{
+			DIO_SNS_POWER = 16;
+		}
+#else
+		DIO_SNS_POWER = PORT_OUT3
+#endif
+		if(u8ConfPort == PORT_CONF2 || sAppData.bConfigMode == FALSE ){
+			vPortSetSns(TRUE);
+			vPortAsOutput(DIO_SNS_POWER);
+			vPortDisablePullup(DIO_SNS_POWER);
+		}
+#endif
+
+#ifdef SWING
+		// DIO1がLoもしくはI2CセンサモードだったらSamp_Monitorモードに変更
+		vPortAsInput(1);
+		if( (bPortRead(1) &&
+			IS_APPCONF_OPT_APP_TWELITE() &&
+			!sAppData.bConfigMode) ||
+			( 0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) ){
+			sAppData.sFlash.sData.u32Opt -= 0x10;
+		}
+		vPortDisablePullup(1);
 #endif
 
 		// configure network
-#ifdef LITE2525A
+#if  defined(LITE2525A) || defined(SWING)
 		if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
 			sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
 			sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
@@ -237,7 +296,11 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		sToCoNet_AppContext.bRxOnIdle = FALSE;
 
+#ifdef SWING
+		sToCoNet_AppContext.u8CCA_Level = 0;
+#else
 		sToCoNet_AppContext.u8CCA_Level = 1;
+#endif
 		sToCoNet_AppContext.u8CCA_Retry = 0;
 
 		sAppData.u8Retry = ((sAppData.sFlash.sData.u8pow>>4)&0x0F) + 0x80;		// 強制再送
@@ -245,18 +308,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		// version info
 		sAppData.u32ToCoNetVersion = ToCoNet_u32GetVersion();
-
-		// M2がLoなら、設定モードとして動作する
-#ifdef CNFMST
-		sAppData.bConfigMode = TRUE;
-#else
-		vPortAsInput(PORT_CONF2);
-		if( !u8PowerUp ){
-			if( !IS_APPCONF_OPT_PASS_SETTINGS() || bPortRead(PORT_CONF2) ){
-				sAppData.bConfigMode = TRUE;
-			}
-		}
-#endif
 
 		if (sAppData.bConfigMode) {
 			// 設定モードで起動
@@ -310,6 +361,23 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppButton();
 		} else
+#ifdef SWING
+		//	SWING専用モード
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SWING ) {
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+			sToCoNet_AppContext.u8CPUClk = 3;
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// ADC の初期化
+			vInitADC();
+
+			// イベント処理の初期化
+			vInitAppSwing();
+		} else
+#endif
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
 			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
 
@@ -418,6 +486,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
 
 			// ADC の初期化
 			vInitADC();
@@ -430,6 +499,8 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 				vInitAppADXL345_LowEnergy();
 			}else if ( sAppData.sFlash.sData.i16param&AIRVOLUME ){
 				vInitAppADXL345_AirVolume();
+			}else if(sAppData.sFlash.sData.i16param&FIFO){
+				vInitAppADXL345_FIFO();
 			}else{
 				vInitAppADXL345();
 			}
@@ -448,20 +519,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppADXL345_LowEnergy();
 		} else
-//		// ADXL345
-//		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_AIRVOLUME ) {
-//			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
-//			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)//
-//
-			// ADC の初期化
-//			vInitADC();
-
-			// Other Hardware
-//			vInitHardware(FALSE);
-
-			// イベント処理の初期化
-//			vInitAppADXL345_AirVolume();
-//		} else
 		// TSL2561
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
 				sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -489,8 +546,9 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// Other Hardware
 			vInitHardware(FALSE);
+#ifndef SWING
 			vInitPulseCounter();
-
+#endif
 			// イベント処理の初期化
 			vInitAppStandard();
 		} else
@@ -507,6 +565,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		if (pvProcessEv2) {
 			ToCoNet_Event_Register_State_Machine(pvProcessEv2);
 		}
+
 
 		// ToCoNet DEBUG
 		ToCoNet_vDebugInit(&sSerStream);
@@ -656,9 +715,34 @@ static void vInitADC() {
 #ifdef USE_TEMP_INSTDOF_ADC2
 	sAppData.sObjADC.u8SourceMask =
 			TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_TEMP;
+		u8ADCPort[0] = TEH_ADC_SRC_ADC_1;
+		u8ADCPort[1] = TEH_ADC_SRC_ADC_TEMP;
+#else
+#ifdef SWING
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_SWING || (0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) ){
+		sAppData.sObjADC.u8SourceMask = TEH_ADC_SRC_VOLT;
+		u8ADCPort[0] = TEH_ADC_IDX_ADC_4;
+		u8ADCPort[1] = TEH_ADC_IDX_ADC_4;
+	}else if(sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD || sAppData.sFlash.sData.u8mode == PKT_ID_LM61){
+		vPortDisablePullup(0);
+		sAppData.sObjADC.u8SourceMask =
+				TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_3;
+		u8ADCPort[0] = TEH_ADC_IDX_ADC_3;
+		u8ADCPort[1] = TEH_ADC_IDX_ADC_3;
+	}else{
+		vPortDisablePullup(0);
+		vPortDisablePullup(1);
+		sAppData.sObjADC.u8SourceMask =
+				TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_3 | TEH_ADC_SRC_ADC_4;
+		u8ADCPort[0] = TEH_ADC_IDX_ADC_3;
+		u8ADCPort[1] = TEH_ADC_IDX_ADC_4;
+	}
 #else
 	sAppData.sObjADC.u8SourceMask =
 			TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_ADC_2;
+	u8ADCPort[0] = TEH_ADC_SRC_ADC_1;
+	u8ADCPort[1] = TEH_ADC_SRC_ADC_2;
+#endif
 #endif
 }
 
@@ -666,7 +750,7 @@ static void vInitADC() {
  * パルスカウンタの初期化
  * - cold boot 時に1回だけ初期化する
  */
-#if !(defined(TWX0003) || defined(CNFMST))
+#if !(defined(TWX0003) || defined(CNFMST) || defined(SWING))
 static void vInitPulseCounter() {
 	// カウンタの設定
 	bAHI_PulseCounterConfigure(
@@ -675,6 +759,7 @@ static void vInitPulseCounter() {
 		0,      // Debounce 0:off, 1:2samples, 2:4samples, 3:8samples
 		FALSE,   // Combined Counter (32bitカウンタ)
 		FALSE);  // Interrupt (割り込み)
+
 
 	// カウンタのセット
 	bAHI_SetPulseCounterRef(
@@ -742,13 +827,6 @@ static void vInitHardware(int f_warm_start) {
 		vPortDisablePullup(PORT_INPUT2);
 		vPortDisablePullup(PORT_INPUT3);
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
-//	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_AIRVOLUME ){
-//		vPortAsInput(PORT_INPUT2);
-//		vPortAsInput(PORT_INPUT3);
-//		vPortDisablePullup(PORT_INPUT2);
-//		vPortDisablePullup(PORT_INPUT3);
-//		vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
-//		vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上がりに設定)
 	}
 #endif
 #endif
@@ -765,8 +843,10 @@ static void vInitHardware(int f_warm_start) {
 		vSerialInit(u32baud, NULL);
 	}
 
-	// SMBUS の初期化
-	vSMBusInit();
+	if( 0x31 <=  sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50 ){
+		// SMBUS の初期化
+		vSMBusInit();
+	}
 }
 
 /** @ingroup MASTER
@@ -833,77 +913,6 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
 #endif
 
 	return;
-}
-
-/**
- * 通常送信関数
- *
- * @param *pu8Data 送信するデータ本体
- * @param u8Length データ長
- * @return 送信成功であれば TRUE
- */
-bool_t bSendMessage( uint8* pu8Data, uint8 u8Length ){
-	bool_t	bOk = TRUE;
-
-	vPortSetSns(FALSE);
-
-	// 暗号化鍵の登録
-	if (IS_APPCONF_OPT_SECURE()) {
-		bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
-		V_PRINTF(LB "*** Register AES key (%d) ***", bRes);
-	}
-
-	// 初期化後速やかに送信要求
-	V_PRINTF(LB"[SNS_COMP/TX]");
-	sAppData.u16frame_count++; // シリアル番号を更新する
-	tsTxDataApp sTx;
-	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
-	uint8 *q =  sTx.auData;
-
-	sTx.u32SrcAddr = ToCoNet_u32GetSerial();
-
-	if (IS_APPCONF_OPT_SECURE()) {
-		sTx.bSecurePacket = TRUE;
-	}
-
-	if (IS_APPCONF_OPT_TO_ROUTER()) {
-		// ルータがアプリ中で一度受信して、ルータから親機に再配送
-		sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
-	} else {
-		// ルータがアプリ中では受信せず、単純に中継する
-		sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
-	}
-
-	// ペイロードの準備
-	S_OCTET('T');
-	S_OCTET(sAppData.sFlash.sData.u8id);
-	S_BE_WORD(sAppData.u16frame_count);
-
-	if( sAppData.sFlash.sData.u8mode == 0xA1 || sAppData.sFlash.sData.u8mode == 0xA2 ){
-		S_OCTET(0x35);	// ADXL345 LowEnergy Mode の時、普通のADXL345として送る
-	}else{
-		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子
-	}
-
-	//	センサ固有のデータ
-	memcpy(q,pu8Data,u8Length);
-	q += u8Length;
-
-	sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
-	sTx.u8Len = q - sTx.auData; // パケットのサイズ
-	sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
-	sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
-	sTx.u8Retry = sAppData.u8Retry;
-
-	//	送信処理
-	bOk = ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx);
-	if ( bOk ) {
-		ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
-		V_PRINTF(LB"TxOk");
-	} else {
-		V_PRINTF(LB"TxFl");
-	}
-	return bOk;
 }
 
 /**

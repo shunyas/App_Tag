@@ -58,6 +58,7 @@ APPSRC += ADT7410.c
 APPSRC += ADXL345.c
 APPSRC += ADXL345_LowEnergy.c
 APPSRC += ADXL345_AirVolume.c
+APPSRC += ADXL345_FIFO.c
 APPSRC += MPL115A2.c
 APPSRC += LIS3DH.c
 APPSRC += L3GD20.c
@@ -74,6 +75,7 @@ APPSRC += sercmd_binary.c
 
 APPSRC += ProcessEv_Standard.c
 APPSRC += ProcessEv_Button.c
+APPSRC += ProcessEv_Swing.c
 APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_ConfigMaster.c
 APPSRC += ProcessEv_Door_Timer.c
@@ -86,6 +88,7 @@ APPSRC += ProcessEv_TSL2561.c
 APPSRC += ProcessEv_ADXL345.c
 APPSRC += ProcessEv_ADXL345_LowEnergy.c
 APPSRC += ProcessEv_ADXL345_AirVolume.c
+APPSRC += ProcessEv_ADXL345_FIFO.c
 APPSRC += ProcessEv_MPL115A2.c
 APPSRC += ProcessEv_LIS3DH.c
 APPSRC += ProcessEv_L3GD20.c
@@ -129,6 +132,11 @@ ifeq ($(BOARD),LITE2525A)
   CFLAGS += -DLITE2525A
   OBJDIR_SUFF += _LITE2525A
   TARGET_SUFF += _LITE2525A
+endif
+ifeq ($(BOARD),SWING)
+  CFLAGS += -DSWING
+  OBJDIR_SUFF += _SWING
+  TARGET_SUFF += _SWING
 endif
 ifeq ($(BOARD),CNFMST)
   CFLAGS += -DCNFMST -DUSE_TOCOSTICK

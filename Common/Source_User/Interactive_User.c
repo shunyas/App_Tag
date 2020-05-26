@@ -49,6 +49,8 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 	p->u8wait = 0;
 #elif CNFMST
 	p->u8wait = 0;
+#elif SWING
+	p->u8wait = 0;
 #else
 	p->u8wait = 30;
 #endif
@@ -78,6 +80,8 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
 #elif CNFMST
 	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
+#elif SWING
+	p->u32Opt = p->u32Opt | 0x10 | 0x400;	// App_TweLite宛に送る
 #endif
 #endif
 

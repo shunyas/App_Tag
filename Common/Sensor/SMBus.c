@@ -87,6 +87,10 @@ PRIVATE bool_t bSMBusWait(void);
 PUBLIC void vSMBusInit(void)
 {
 
+#ifdef SWING
+	vAHI_SiSetLocation(TRUE);
+#endif
+
 	/* run bus at 100KHz */
 	vAHI_SiMasterConfigure(TRUE, FALSE, 7);
 			// 16/[(PreScaler + 1) x 5]MHz

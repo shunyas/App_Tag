@@ -75,9 +75,14 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		S_OCTET(sAppData.bDI1_Now_Opened); // 開閉状態
 		S_BE_DWORD(sAppData.u32DI1_Dur_Opened_ms); // 連続開時間
 
-		if( bSendMessage( au8Data, q-au8Data ) ){
+		sAppData.u16frame_count++;
+
+		if( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ){
+			V_PRINTF(LB "Tx Start...");
+			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 		}else{
 			sAppData.u8NwkStat = E_IO_TIMER_NWK_COMPLETE_TX_FAIL;
+			V_PRINTF(LB "Tx Fail.");
 		}
 
 //		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {

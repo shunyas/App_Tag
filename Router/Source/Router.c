@@ -208,11 +208,10 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		Interactive_vInit();
 
 		// START UP MESSAGE
-		A_PRINTF("\r\n*** ToCoTemp Parent %d.%02d-%d ***",
-				VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-		A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x",
-				sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(),
-				sToCoNet_AppContext.u16ShortAddress);
+		A_PRINTF(LB "*** " APP_NAME " (Router) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+		A_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d" LB,
+				sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
+				sAppData.sFlash.sData.u8id);
 	}
 }
 

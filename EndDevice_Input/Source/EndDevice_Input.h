@@ -109,6 +109,7 @@ extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 
 void vInitAppStandard();
 void vInitAppButton();
+void vInitAppSwing();
 void vInitAppSHT21();
 void vInitAppBME280();
 void vInitAppS1105902();
@@ -119,13 +120,13 @@ void vInitAppL3GD20();
 void vInitAppADXL345();
 void vInitAppADXL345_LowEnergy();
 void vInitAppADXL345_AirVolume();
+void vInitAppADXL345_FIFO();
 void vInitAppTSL2561();
 void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();
 void vInitAppConfigMaster();
 
-bool_t bSendMessage( uint8* pu8Data, uint8 u8Length );
 void vPortSetSns(bool_t bActive);
 
 /****************************************************************************/
@@ -133,10 +134,13 @@ void vPortSetSns(bool_t bActive);
 /****************************************************************************/
 extern tsFILE sSerStream;
 extern tsCbHandler *psCbHandler;
+extern uint8 u8ConfPort;
 
 #if defined __cplusplus
 }
 #endif
+
+extern uint8 u8ADCPort[2];
 
 #endif  /* MASTER_H_INCLUDED */
 
