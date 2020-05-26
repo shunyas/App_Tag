@@ -475,7 +475,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_FLUSH();
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 
 		//	割り込みの設定
 		vAHI_DioSetDirection(PORT_INPUT_MASK_AIRVOLUME, 0); // set as input

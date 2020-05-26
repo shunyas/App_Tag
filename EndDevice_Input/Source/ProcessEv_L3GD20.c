@@ -170,7 +170,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		pEv->bKeepStateOnSetAll = FALSE; // スリープ復帰の状態を維持
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 
 		// 周期スリープに入る
 		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒

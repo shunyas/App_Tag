@@ -10,19 +10,19 @@
 #include "EndDevice_Input.h"
 
 #include "sensor_driver.h"
-#include "SHT21.h"
+#include "MAX31855.h"
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
-static void vProcessSHT21(teEvent eEvent);
+static void vProcessMAX31855(teEvent eEvent);
 static uint8 u8sns_cmplt = 0;
 
 static tsSnsObj sSnsObj;
-static tsObjData_SHT21 sObjSHT21;
+static tsObjData_MAX31855 sObjMAX31855;
 
 enum {
 	E_SNS_ADC_CMP_MASK = 1,
-	E_SNS_SHT21_CMP = 2,
+	E_SNS_MAX31855_CMP = 2,
 	E_SNS_ALL_CMP = 3
 };
 
@@ -43,19 +43,22 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
 		}
 
+
 		// RC クロックのキャリブレーションを行う
 		ToCoNet_u16RcCalib(sAppData.sFlash.sData.u16RcClock);
 
 		// センサーがらみの変数の初期化
 		u8sns_cmplt = 0;
 
-		// SHT21 の初期化
-		vSHT21_Init(&sObjSHT21, &sSnsObj);
+		// MAX31855 の初期化
+		vMAX31855_Init(&sObjMAX31855, &sSnsObj);
+		bMAX31855reset();
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等
-			u8sns_cmplt |= E_SNS_SHT21_CMP;
-			V_PRINTF(LB "*** SHT21 comm err?");
+			u8sns_cmplt |= E_SNS_MAX31855_CMP;
+			V_PRINTF(LB "*** MAX31855 comm err?");
+			V_FLUSH();
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 			return;
 		}
@@ -76,20 +79,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		// 短期間スリープからの起床をしたので、センサーの値をとる
 	if ((eEvent == E_EVENT_START_UP) && (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK)) {
 		V_PRINTF("#");
-		vProcessSHT21(E_EVENT_START_UP);
-	}
-
-	// ２回スリープすると完了
-	if (u8sns_cmplt != E_SNS_ALL_CMP && (u8sns_cmplt & E_SNS_ADC_CMP_MASK)) {
-		// ADC 完了後、この状態が来たらスリープする
-		pEv->bKeepStateOnSetAll = TRUE; // スリープ復帰の状態を維持
-
-		vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
-		vAHI_DioWakeEnable(0, 0);
-
-		// スリープを行うが、WAKE_TIMER_0 は定周期スリープのためにカウントを続けているため
-		// 空いている WAKE_TIMER_1 を利用する
-		ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 50, FALSE, FALSE); // PERIODIC RAM OFF SLEEP USING WK1
+		vProcessMAX31855(E_EVENT_START_UP);
 	}
 
 	// 送信処理に移行
@@ -123,22 +113,18 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 		}
 
-		uint8 au8Data[9];
+		uint8 au8Data[13];
 		uint8 *q =  au8Data;
 
 		S_OCTET(sAppData.sSns.u8Batt);
 		S_BE_WORD(sAppData.sSns.u16Adc1);
 		S_BE_WORD(sAppData.sSns.u16Adc2);
-		S_BE_WORD(sObjSHT21.ai16Result[SHT21_IDX_TEMP]);
-		S_BE_WORD(sObjSHT21.ai16Result[SHT21_IDX_HUMID]);
+		S_BE_DWORD(sObjMAX31855.ai32Result[MAX31855_IDX_THERMOCOUPLE_TEMP]);
+		S_BE_DWORD(sObjMAX31855.ai32Result[MAX31855_IDX_INTERNAL_TEMP]);
 
 		sAppData.u16frame_count++;
 		if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
 			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
-#ifdef TWX0003
-			vPortSetLo(PORT_KIT_LED1);
-			vPortAsOutput(PORT_KIT_LED1);
-#endif
 			V_PRINTF(LB"TxOk");
 		} else {
 			V_PRINTF(LB"TxFl");
@@ -164,8 +150,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
 		V_PRINTF(LB"! Sleeping...");
 		V_FLUSH();
-
-		pEv->bKeepStateOnSetAll = FALSE; // スリープ復帰の状態を維持
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		if( sAppData.pContextNwk ){
@@ -238,7 +222,7 @@ static uint8 cbAppToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
-		vProcessSHT21(E_EVENT_TICK_TIMER);
+		vProcessMAX31855(E_EVENT_TICK_TIMER);
 		break;
 
 	case E_AHI_DEVICE_ANALOGUE:
@@ -328,12 +312,12 @@ static tsCbHandler sCbHandler = {
 /**
  * アプリケーション初期化
  */
-void vInitAppSHT21() {
+void vInitAppMAX31855() {
 	psCbHandler = &sCbHandler;
 	pvProcessEv1 = vProcessEvCore;
 }
 
-static void vProcessSHT21(teEvent eEvent) {
+static void vProcessMAX31855(teEvent eEvent) {
 	if (bSnsObj_isComplete(&sSnsObj)) {
 		 return;
 	}
@@ -341,11 +325,11 @@ static void vProcessSHT21(teEvent eEvent) {
 	// イベントの処理
 	vSnsObj_Process(&sSnsObj, eEvent); // ポーリングの時間待ち
 	if (bSnsObj_isComplete(&sSnsObj)) {
-		u8sns_cmplt |= E_SNS_SHT21_CMP;
+		u8sns_cmplt |= E_SNS_MAX31855_CMP;
 
-		V_PRINTF(LB"!SHT21: %d.%02dC %d.%02d%%",
-			sObjSHT21.ai16Result[SHT21_IDX_TEMP] / 100, sObjSHT21.ai16Result[SHT21_IDX_TEMP] % 100,
-			sObjSHT21.ai16Result[SHT21_IDX_HUMID] / 100, sObjSHT21.ai16Result[SHT21_IDX_HUMID] % 100
+		V_PRINTF(LB"!MAX31855: %d.%02dC %d.%02dC",
+			sObjMAX31855.ai32Result[MAX31855_IDX_THERMOCOUPLE_TEMP] / 100, sObjMAX31855.ai32Result[MAX31855_IDX_THERMOCOUPLE_TEMP] % 100,
+			sObjMAX31855.ai32Result[MAX31855_IDX_INTERNAL_TEMP] / 10000, sObjMAX31855.ai32Result[MAX31855_IDX_INTERNAL_TEMP] % 10000
 		);
 
 		// 完了時の処理

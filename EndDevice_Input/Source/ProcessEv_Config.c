@@ -3,6 +3,7 @@
  * AGREEMENT).                                                   */
 
 // 詳細は remote_config.h を参照
+
 #include <jendefs.h>
 
 #include "utils.h"
@@ -88,7 +89,8 @@ PRSEV_HANDLER_DEF(E_STATE_WAIT_COMMAND, tsEvent *pEv, teEvent eEvent, uint32 u32
 		if(( u8Flags&0x02) != 0 ){
 			ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
 		}else{
-			V_PRINTF( LB"!TIME OUT RX" );
+			//V_PRINTF( LB"!TIME OUT RX" );
+			V_PRINTF( LB"!INF:OTA TIME OUT" );
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_FAILED);	// 失敗時は FAILED 状態に遷移
 		}
 	}
@@ -156,14 +158,16 @@ PRSEV_HANDLER_DEF(E_STATE_APP_INTERACTIVE, tsEvent *pEv, teEvent eEvent, uint32 
 PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_NEW_STATE) {
 		sAppData.u8LedState = 0;		// LED消灯
-		// インタラクティブモードの画面表示をすみやかに実施
-		if( u8Flags != 7 ){
-			V_PRINTF(LB"!INF: CANNOT UPDATE SETTINGS. RESTART THE SYSTEM. %02X", u8Flags);
+		if( u8Flags == 7 ){
+			Config_vUpdateScreen();
+			V_PRINTF("!INF:CONFIG DATA WAS UPDATED AS ABOVE. RESTART THE SYSTEM. %02X", u8Flags);
+		}else if( u8Flags&0x02 ){
+			V_PRINTF(LB"!ACK WAS NOT RETURNED. PLEASE RESTART. %02X", u8Flags);
+			V_FLUSH();
+		}else{
+			V_PRINTF(LB"!INF:OTA SKIPPED. START NORMALLY. %02X", u8Flags);
 			V_FLUSH();
 			vSleep(100, FALSE, TRUE);
-		}else{
-			Config_vUpdateScreen();
-			V_PRINTF("!INF: CONFIG DATA WAS UPDATED AS ABOVE. RESTART THE SYSTEM. %02X", u8Flags);
 		}
 	}
 
@@ -172,6 +176,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		sAppData.u8LedState = 1;
 		LED_ON(LED);
 		V_PRINTF("!INF: ETERNAL SLEEP %02X", u8Flags);
+		V_FLUSH();
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
 		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
 	}

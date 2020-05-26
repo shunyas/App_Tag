@@ -13,6 +13,7 @@
 
 #include "sensor_driver.h"
 #include "ADXL345.h"
+#include "SMBus.h"
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
@@ -140,6 +141,11 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 }
 
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	static int32 ave[3] = {0,0,0};
+	static int16 min[3] = {17000,17000,17000};
+	static int16 max[3] = {-17000,-17000,-17000};
+	static uint16 u16Sample = 0;
+
 	if (eEvent == E_EVENT_NEW_STATE) {
 		// ネットワークの初期化
 		if (!sAppData.pContextNwk) {
@@ -158,41 +164,106 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			ToCoNet_Nwk_bResume(sAppData.pContextNwk);
 		}
 
-		if( sAppData.bWakeupByButton && (sObjADXL345.u8Interrupt&0x02) ){
-			u8GetCount++;		// 送信回数をインクリメント
+		int16 ai16ResultAccel[3][10];		// 3軸データを10サンプルまで
+		uint8 u8Sample = sObjADXL345.u8FIFOSample;
+		uint8 i = 0;
+		if( sObjADXL345.u8FIFOSample > 10 ){
+			u8Sample = 10;
+			i = sObjADXL345.u8FIFOSample-10;
+		}
 
-			uint8	i;
-			uint8	au8Data[91];
-			uint8*	q = au8Data;
-			S_OCTET(sAppData.sSns.u8Batt);
-			S_BE_WORD(sAppData.sSns.u16Adc1);
-			S_BE_WORD(sAppData.sSns.u16Adc2);
-			if(sObjADXL345.u8FIFOSample > 10){
-				i = sObjADXL345.u8FIFOSample-10;
+		uint8 j;
+		for( j=0; j<u8Sample; j++){
+			ai16ResultAccel[0][j] = sObjADXL345.ai16ResultX[i+j];
+			ai16ResultAccel[1][j] = sObjADXL345.ai16ResultY[i+j];
+			ai16ResultAccel[2][j] = sObjADXL345.ai16ResultZ[i+j];
+
+			uint8 k;
+			for(k=0; k<3; k++){
+				ave[k] += ai16ResultAccel[k][j];
+				if( min[k] > ai16ResultAccel[k][j] ){
+					min[k] = ai16ResultAccel[k][j];
+				}
+				if( max[k] < ai16ResultAccel[k][j] ){
+					max[k] = ai16ResultAccel[k][j];
+				}
+			}
+		}
+		u16Sample += u8Sample;
+
+		if( (sAppData.sFlash.sData.i16param&2048) == 0 ||			// min,max以外は送る
+			 sAppData.sFlash.sData.u8wait == 0 ||					// 送信回数が設定されなければ送る
+			 u8GetCount >= sAppData.sFlash.sData.u8wait-1 ){		// 最後の一回は送る
+			if( sAppData.bWakeupByButton && (sObjADXL345.u8Interrupt&0x02) ){
+				u8GetCount++;		// 送信回数をインクリメント
+
+				uint8	au8Data[91];
+				uint8*	q = au8Data;
+				S_OCTET(sAppData.sSns.u8Batt);
+				S_BE_WORD(sAppData.sSns.u16Adc1);
+				S_BE_WORD(sAppData.sSns.u16Adc2);
+
+				if( sAppData.sFlash.sData.i16param&2048 ){
+					ave[0] /= u16Sample;
+					ave[1] /= u16Sample;
+					ave[2] /= u16Sample;
+					V_PRINTF( LB"ave=%d", ave[0] );
+					V_PRINTF( LB"min=%d", min[0] );
+					V_PRINTF( LB"max=%d"LB, max[0] );
+
+					S_BE_WORD(ave[0]);
+					S_BE_WORD(ave[1]);
+					S_BE_WORD(ave[2]);
+					S_OCTET( 0xF9 );
+
+					S_BE_WORD(u16Sample);
+
+					S_BE_WORD(min[0]);
+					S_BE_WORD(min[1]);
+					S_BE_WORD(min[2]);
+
+					S_BE_WORD(max[0]);
+					S_BE_WORD(max[1]);
+					S_BE_WORD(max[2]);
+
+					max[0] = -17000;
+					max[1] = -17000;
+					max[2] = -17000;
+					min[0] = 17000;
+					min[1] = 17000;
+					min[2] = 17000;
+					ave[0] = 0;
+					ave[1] = 0;
+					ave[2] = 0;
+				}else{
+					S_BE_WORD(ai16ResultAccel[0][0]);
+					S_BE_WORD(ai16ResultAccel[1][0]);
+					S_BE_WORD(ai16ResultAccel[2][0]);
+
+					S_OCTET( 0xFA );
+					S_OCTET( u16Sample );
+					for( j=1; j<u8Sample; j++ ){
+						S_BE_WORD(ai16ResultAccel[0][j]);
+						S_BE_WORD(ai16ResultAccel[1][j]);
+						S_BE_WORD(ai16ResultAccel[2][j]);
+					}
+				}
+				u16Sample = 0;
+
+				sAppData.u16frame_count++;
+
+				if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
+				} else {
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
+				}
 			}else{
-				i = 0;
-			}
-			S_BE_WORD(sObjADXL345.ai16ResultX[i]);
-			S_BE_WORD(sObjADXL345.ai16ResultY[i]);
-			S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
-
-			S_OCTET( 0xFA );
-			S_OCTET( sObjADXL345.u8FIFOSample-i );
-			i++;
-			for( ; i<sObjADXL345.u8FIFOSample; i++ ){
-				S_BE_WORD(sObjADXL345.ai16ResultX[i]);
-				S_BE_WORD(sObjADXL345.ai16ResultY[i]);
-				S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
-			}
-
-			sAppData.u16frame_count++;
-
-			if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
-			} else {
+				V_PRINTF(LB"First");
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 			}
 		}else{
-			V_PRINTF(LB"First");
+			if(u16Sample > 0){
+				u8GetCount++;		// 送信回数をインクリメント
+			}
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 		}
 
@@ -215,7 +286,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 
 		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // ENABLE DIO WAKE SOURCE
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
@@ -234,7 +307,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 				bADXL345FIFOreadResult( sObjADXL345.ai16ResultX, sObjADXL345.ai16ResultY, sObjADXL345.ai16ResultZ );
 				// ダメ押しでレジスタに残っているデータも読み込む
 				uint8 au8data[6];
-				bool_t bOk;
+				bool_t bOk = TRUE;
 				GetAxis(bOk, au8data);
 			}else{
 				bADXL345_DisableFIFO( (uint16)(sAppData.sFlash.sData.i16param&0xFFFF) );
@@ -416,9 +489,10 @@ static void vProcessADXL345_FIFO(teEvent eEvent) {
 	if (bSnsObj_isComplete(&sSnsObj)) {
 		u8sns_cmplt |= E_SNS_ADXL345_CMP;
 
-		uint8 i;
-		V_PRINTF( LB"!NUM = %d", sObjADXL345.u8FIFOSample );
 
+		V_PRINTF( LB"!NUM = %d", sObjADXL345.u8FIFOSample );
+#ifdef DEBUG
+		uint8 i;
 		for(i=0; i<sObjADXL345.u8FIFOSample; i++ ){
 			V_PRINTF(LB"!ADXL345_%d: X : %d, Y : %d, Z : %d",
 					i,
@@ -427,6 +501,14 @@ static void vProcessADXL345_FIFO(teEvent eEvent) {
 					sObjADXL345.ai16ResultZ[i]
 			);
 		}
+#else
+	V_PRINTF(LB"!ADXL345_%d: X : %d, Y : %d, Z : %d",
+			0,
+			sObjADXL345.ai16ResultX[0],
+			sObjADXL345.ai16ResultY[0],
+			sObjADXL345.ai16ResultZ[0]
+	);
+#endif
 
 		// 完了時の処理
 		if (u8sns_cmplt == E_SNS_ALL_CMP) {

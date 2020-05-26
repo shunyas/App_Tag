@@ -44,6 +44,8 @@
 // Select Modules (define befor include "ToCoNet.h")
 #define ToCoNet_USE_MOD_NWK_LAYERTREE
 #define ToCoNet_USE_MOD_NBSCAN // Neighbour scan module
+#define ToCoNet_USE_MOD_NBSCAN_SLAVE
+#define ToCoNet_USE_MOD_DUPCHK
 #define ToCoNet_USE_MOD_CHANNEL_MGR
 #define ToCoNet_USE_MOD_NWK_MESSAGE_POOL
 

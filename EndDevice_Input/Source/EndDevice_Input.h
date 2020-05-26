@@ -47,6 +47,25 @@ static const uint16 u16_IO_Timer_mini_sleep_dur = 1000;
  */
 static const uint16 u16_IO_Timer_buzz_dur = 100;
 
+/**
+ * ボタンモード向け定義
+ */
+#define E_INVERSE_INT 0x0001
+#define E_DBLEDGE_INT 0x0002
+#define E_SWING_MODE  0x0004
+#define E_MULTI_INPUT 0x0008
+#define E_ENABLE_WDT  0x0100
+#define E_INPUT_TIMER 0x0200
+#define E_TIMER_MODE  0x0400
+
+#define IS_INVERSE_INT() ((sAppData.sFlash.sData.i16param & E_INVERSE_INT) != 0)
+#define IS_DBLEDGE_INT() ((sAppData.sFlash.sData.i16param & E_DBLEDGE_INT) != 0)
+#define IS_SWING_MODE()  ((sAppData.sFlash.sData.i16param & E_SWING_MODE) != 0)
+#define IS_MULTI_INPUT() ((sAppData.sFlash.sData.i16param & E_MULTI_INPUT) != 0)
+#define IS_ENABLE_WDT() ((sAppData.sFlash.sData.i16param & E_ENABLE_WDT) != 0)
+#define IS_INPUT_TIMER() ((sAppData.sFlash.sData.i16param & E_INPUT_TIMER) != 0)
+#define IS_TIMER_MODE() ((sAppData.sFlash.sData.i16param & E_TIMER_MODE) != 0)
+
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
@@ -84,6 +103,8 @@ extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 void vInitAppStandard();
 void vInitAppButton();
 void vInitAppSHT21();
+void vInitAppSHT31();
+void vInitAppSHTC3();
 void vInitAppBME280();
 void vInitAppS1105902();
 void vInitAppADT7410();
@@ -95,6 +116,7 @@ void vInitAppADXL345_LowEnergy();
 void vInitAppADXL345_AirVolume();
 void vInitAppADXL345_FIFO();
 void vInitAppTSL2561();
+void vInitAppMAX31855();
 void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();
@@ -110,11 +132,14 @@ extern tsFILE sSerStream;
 extern tsCbHandler *psCbHandler;
 extern uint8 u8ConfPort;
 
+extern uint32 u32InputMask;
+extern uint32 u32InputSubMask;
+
 #if defined __cplusplus
 }
 #endif
 
-extern uint8 u8ADCPort[2];
+extern uint8 u8ADCPort[4];
 
 #endif  /* MASTER_H_INCLUDED */
 

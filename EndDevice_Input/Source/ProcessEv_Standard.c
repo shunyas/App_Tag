@@ -19,23 +19,25 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	static bool_t bWaiting = FALSE;
 
 	if (eEvent == E_EVENT_START_UP) {
-		// 起床メッセージ
-		vSerInitMessage();
-
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
-			// Warm start message
-			V_PRINTF(LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
 
 			// 起動時の待ち処理
 			// (Resume 時に MAC 層の初期化が行われるため電流が流れる。その前にスリープ)
 			if (sAppData.sFlash.sData.u8wait) {
 				if (bWaiting == FALSE) {
+					// Warm start message
+					V_PRINTF( LB LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
+					V_FLUSH();
+
 					bWaiting = TRUE;
 					ToCoNet_vSleep( E_AHI_WAKE_TIMER_1, sAppData.sFlash.sData.u8wait, FALSE, FALSE);
 					return;
 				} else {
+					V_PRINTF( LB"End Sensor Wait Duration." );
 					bWaiting = FALSE;
 				}
+			}else{
+				V_PRINTF( LB LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
 			}
 
 			// RESUME
@@ -46,8 +48,11 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		} else {
 			// 開始する
 			// start up message
+			// 起床メッセージ
+			vSerInitMessage();
 			V_PRINTF(LB "*** Cold starting");
 			V_PRINTF(LB "* start end device[%d]", u32TickCount_ms & 0xFFFF);
+			V_FLUSH();
 
 			sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ENDDEVICE;
 			// ネットワークの初期化
@@ -88,32 +93,54 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 			uint8* q = au8Data;
 
 			// DIO の設定
-			uint8 DI_Bitmap = (sAppData.sSns.u16Adc1>800 ? 0x08:0x00) + (sAppData.sSns.u16Adc1 > 600 ? 0x04:0x00) + (sAppData.sSns.u16Adc1 > 400 ? 0x02:0x00) +  (sAppData.sSns.u16Adc1 > 200 ? 0x01:0x00);
+			uint8 DI_Bitmap = (sAppData.sSns.u16Adc1 > 800 ? 0x08:0x00)
+							+ (sAppData.sSns.u16Adc1 > 600 ? 0x04:0x00)
+							+ (sAppData.sSns.u16Adc1 > 400 ? 0x02:0x00)
+							+ (sAppData.sSns.u16Adc1 > 200 ? 0x01:0x00);
 			S_OCTET(DI_Bitmap);
 			S_OCTET(0x0F);
 
 			// PWM(AI)の設定
 			uint16 u16v = sAppData.sSns.u16Adc1 >> 2;
 			uint8 u8MSB = (u16v>>2)&0xff;
-			S_OCTET(u8MSB);
-			S_OCTET(0x00);
-			S_OCTET(0x00);
-			S_OCTET(0x00);
-
 			// 下2bitを u8LSBs に詰める
 			uint8 u8LSBs = u16v|0x03;
+			S_OCTET(u8MSB);
+
+			u16v = sAppData.sSns.u16Adc3 >> 2;
+			u8MSB = (u16v>>2)&0xff;
+			u8LSBs |= (u16v|0x03)<<2;
+			S_OCTET(u8MSB);
+
+			u16v = sAppData.sSns.u16Adc2 >> 2;
+			u8MSB = (u16v>>2)&0xff;
+			u8LSBs |= (u16v|0x03)<<4;
+			S_OCTET(u8MSB);
+
+			u16v = sAppData.sSns.u16Adc4 >> 2;
+			u8MSB = (u16v>>2)&0xff;
+			u8LSBs |= (u16v|0x03)<<6;
+			S_OCTET(u8MSB);
 			S_OCTET(u8LSBs);
 
 			bOk = bTransmitToAppTwelite( au8Data, q-au8Data );
 		}else{
-			uint8 au8Data[12];
+			uint8 au8Data[9];
 			uint8 *q =  au8Data;
 
 			S_OCTET(sAppData.sSns.u8Batt);			// 電源電圧
-			S_BE_WORD(sAppData.sSns.u16Adc1);
-			S_BE_WORD(sAppData.sSns.u16Adc2);
-			S_BE_WORD(sAppData.sSns.u16PC1);
-			S_BE_WORD(sAppData.sSns.u16PC2);
+			if( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD && (sAppData.sFlash.sData.i16param&0x0001) ){
+				sAppData.sSns.u16Adc1 |= 0x8000; 		// ADCを4ポート使用してますよビット
+				S_BE_WORD(sAppData.sSns.u16Adc1);
+				S_BE_WORD(sAppData.sSns.u16Adc3);
+				S_BE_WORD(sAppData.sSns.u16Adc2);
+				S_BE_WORD(sAppData.sSns.u16Adc4);
+			}else{
+				S_BE_WORD(sAppData.sSns.u16Adc1);
+				S_BE_WORD(sAppData.sSns.u16Adc2);
+				S_BE_WORD(sAppData.sSns.u16PC1);
+				S_BE_WORD(sAppData.sSns.u16PC2);
+			}
 
 			//	LM61を使う場合
 			uint16 bias=0;
@@ -323,15 +350,20 @@ void vInitAppStandard() {
  */
 static void vStoreSensorValue() {
 #ifndef SWING
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_0, &sAppData.sSns.u16PC1); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_0); // 16bitの場合
+	if( !(sAppData.sFlash.sData.i16param&0x0001) ){
+		// パルス数の読み込み
+		bAHI_Read16BitCounter(E_AHI_PC_0, &sAppData.sSns.u16PC1); // 16bitの場合
+		// パルス数のクリア
+		bAHI_Clear16BitPulseCounter(E_AHI_PC_0); // 16bitの場合
 
-	// パルス数の読み込み
-	bAHI_Read16BitCounter(E_AHI_PC_1, &sAppData.sSns.u16PC2); // 16bitの場合
-	// パルス数のクリア
-	bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
+		// パルス数の読み込み
+		bAHI_Read16BitCounter(E_AHI_PC_1, &sAppData.sSns.u16PC2); // 16bitの場合
+		// パルス数のクリア
+		bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
+	}else{
+		sAppData.sSns.u16PC1 = 0;
+		sAppData.sSns.u16PC2 = 0;
+	}
 #else
 	sAppData.sSns.u16PC1 = 0;
 	sAppData.sSns.u16PC2 = 0;
@@ -340,6 +372,14 @@ static void vStoreSensorValue() {
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
 	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[u8ADCPort[1]];
+	if( sAppData.sFlash.sData.i16param&0x0001 ){
+		sAppData.sSns.u16Adc3 = sAppData.sObjADC.ai16Result[u8ADCPort[2]];
+		sAppData.sSns.u16Adc4 = sAppData.sObjADC.ai16Result[u8ADCPort[3]];
+	}else{
+		sAppData.sSns.u16Adc3 = 0;
+		sAppData.sSns.u16Adc4 = 0;
+	}
+
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする

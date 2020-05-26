@@ -77,6 +77,8 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd);
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
+uint32 u32InputMask;
+uint32 u32InputSubMask;
 
 /****************************************************************************/
 /***        Local Variables                                               ***/
@@ -92,7 +94,7 @@ uint8 u8PowerUp; // 0x01:from Deep
 
 uint8 u8ConfPort  = PORT_CONF2;
 
-uint8 u8ADCPort[2];
+uint8 u8ADCPort[4];
 
 uint8 DIO_SNS_POWER = 0;
 
@@ -362,19 +364,54 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppTSL2561();
 		} else
+		// MAX31855
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_MAX31855 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// イベント処理の初期化
+			vInitAppMAX31855();
+		} else
+		// SHT31
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT31 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// イベント処理の初期化
+			vInitAppSHT31();
+		} else
+		// SHTC3
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHTC3 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// イベント処理の初期化
+			vInitAppSHTC3();
+		} else
 		//	LM61等のアナログセンサ用
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
 			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
 			// 通常アプリで起動
 			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
-			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
 
 			// ADC の初期化
 			vInitADC();
 
 #ifndef SWING
-			vInitPulseCounter();
+			if( !(sAppData.sFlash.sData.i16param&0x0001) && sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD ){
+				vInitPulseCounter();
+			}
 #endif
 			// イベント処理の初期化
 			vInitAppStandard();
@@ -439,13 +476,13 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 				FALSE,
 				FALSE);
 
-		vPortSetSns(TRUE);
-		vPortAsOutput(DIO_SNS_POWER);
 
-		// Other Hardware
-		Interactive_vReInit();
 		// 他のハードの待ち
+		Interactive_vReInit();
 		vInitHardware(TRUE);
+
+		vPortSetSns(TRUE);
+//		vPortAsOutput(DIO_SNS_POWER);
 
 		// TOCONET DEBUG
 		ToCoNet_vDebugInit(&sSerStream);
@@ -553,6 +590,8 @@ static void vInitADC() {
 	vADC_Init(&sAppData.sObjADC, &sAppData.sADC, TRUE);
 	sAppData.u8AdcState = 0xFF; // 初期化中
 
+	memset( u8ADCPort, 0xFF, sizeof(u8ADCPort) );
+
 #ifdef SWING
 	if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON || (0x30 < sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) ){
 		sAppData.sObjADC.u8SourceMask = TEH_ADC_SRC_VOLT;
@@ -573,10 +612,21 @@ static void vInitADC() {
 		u8ADCPort[1] = TEH_ADC_IDX_ADC_4;
 	}
 #else
-	sAppData.sObjADC.u8SourceMask =
-			TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_ADC_2;
-	u8ADCPort[0] = TEH_ADC_IDX_ADC_1;
-	u8ADCPort[1] = TEH_ADC_IDX_ADC_2;
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD && (sAppData.sFlash.sData.i16param&0x0001) ){
+		vPortDisablePullup(0);
+		vPortDisablePullup(1);
+		sAppData.sObjADC.u8SourceMask =
+				TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_ADC_2 | TEH_ADC_SRC_ADC_3 | TEH_ADC_SRC_ADC_4;
+		u8ADCPort[0] = TEH_ADC_IDX_ADC_1;
+		u8ADCPort[1] = TEH_ADC_IDX_ADC_2;
+		u8ADCPort[2] = TEH_ADC_IDX_ADC_3;
+		u8ADCPort[3] = TEH_ADC_IDX_ADC_4;
+	}else{
+		sAppData.sObjADC.u8SourceMask =
+				TEH_ADC_SRC_VOLT | TEH_ADC_SRC_ADC_1 | TEH_ADC_SRC_ADC_2;
+		u8ADCPort[0] = TEH_ADC_IDX_ADC_1;
+		u8ADCPort[1] = TEH_ADC_IDX_ADC_2;
+	}
 #endif
 }
 
@@ -627,9 +677,61 @@ static void vInitPulseCounter() {
  */
 static void vInitHardware(int f_warm_start) {
 
+	// Serial Port の初期化
+	{
+		tsUartOpt sUartOpt;
+		memset(&sUartOpt, 0, sizeof(tsUartOpt));
+		uint32 u32baud = UART_BAUD;
+
+		// BPS ピンが Lo の時は 38400bps
+		vPortAsInput(PORT_BAUD);
+		if (sAppData.bFlashLoaded && (bPortRead(PORT_BAUD) || IS_APPCONF_OPT_UART_FORCE_SETTINGS() )) {
+			u32baud = sAppData.sFlash.sData.u32baud_safe;
+			sUartOpt.bHwFlowEnabled = FALSE;
+			sUartOpt.bParityEnabled = UART_PARITY_ENABLE;
+			sUartOpt.u8ParityType = UART_PARITY_TYPE;
+			sUartOpt.u8StopBit = UART_STOPBITS;
+
+			// 設定されている場合は、設定値を採用する (v1.0.3)
+			switch(sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_PARITY_MASK) {
+			case 0:
+				sUartOpt.bParityEnabled = FALSE;
+				break;
+			case 1:
+				sUartOpt.bParityEnabled = TRUE;
+				sUartOpt.u8ParityType = E_AHI_UART_ODD_PARITY;
+				break;
+			case 2:
+				sUartOpt.bParityEnabled = TRUE;
+				sUartOpt.u8ParityType = E_AHI_UART_EVEN_PARITY;
+				break;
+			}
+
+			// ストップビット
+			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_STOPBIT_MASK) {
+				sUartOpt.u8StopBit = E_AHI_UART_2_STOP_BITS;
+			} else {
+				sUartOpt.u8StopBit = E_AHI_UART_1_STOP_BIT;
+			}
+
+			// 7bitモード
+			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_WORDLEN_MASK) {
+				sUartOpt.u8WordLen = 7;
+			} else {
+				sUartOpt.u8WordLen = 8;
+			}
+
+			vSerialInit(u32baud, &sUartOpt);
+		} else {
+			vSerialInit(u32baud, NULL);
+		}
+
+	}
+
 #ifdef OTA
 	vPortSetLo(PORT_OUT4);		//	WD
 	vPortAsOutput(PORT_OUT4);		//	WD
+	vPortDisablePullup(PORT_OUT4);	//	WD
 	vPortAsOutput(PORT_INPUT3);		//	WD_ENB
 
 	// MONOSTICK を想定する
@@ -642,14 +744,16 @@ static void vInitHardware(int f_warm_start) {
 #else
 	if(!f_warm_start){
 		// リセットICの無効化(イの一番に処理)
-		vPortSetLo(DIO_VOLTAGE_CHECKER);
-		vPortAsOutput(DIO_VOLTAGE_CHECKER);
-		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
+		if(sAppData.sFlash.sData.u8mode < 0x61 || 0x70 < sAppData.sFlash.sData.u8mode ){
+			vPortSetLo(DIO_VOLTAGE_CHECKER);
+			vPortAsOutput(DIO_VOLTAGE_CHECKER);
+			vPortDisablePullup(DIO_VOLTAGE_CHECKER);
 
-		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
-		vPortSetHi(DIO_SUPERCAP_CONTROL);
-		vPortAsOutput(DIO_SUPERCAP_CONTROL);
-		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
+			// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
+			vPortSetHi(DIO_SUPERCAP_CONTROL);
+			vPortAsOutput(DIO_SUPERCAP_CONTROL);
+			vPortDisablePullup(DIO_SUPERCAP_CONTROL);
+		}
 
 		// WDT用出力の初期化
 		vPortSetLo(3);
@@ -730,25 +834,49 @@ static void vInitHardware(int f_warm_start) {
 
 		// 入力ポートを明示的に指定する
 		if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
+			u32InputMask = PORT_INPUT_MASK;
+			u32InputSubMask = 0;
 			vPortAsInput(DIO_BUTTON);
-			if((sAppData.sFlash.sData.i16param&2) != 0){		// 両方のエッジをとる場合
+
+			if( IS_DBLEDGE_INT() ){		// 両方のエッジをとる場合
 				vPortAsInput( PORT_INPUT2 );
-				vPortDisablePullup(DIO_BUTTON);
-				vPortDisablePullup(PORT_INPUT2);
-				vAHI_DioWakeEnable(PORT_INPUT_MASK|PORT_INPUT_SUBMASK , 0); // also use as DIO WAKE SOURCE
-				vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
-			}else if( sAppData.sFlash.sData.i16param == 1 ){	// 立下りを見る場合
-				vPortDisablePullup(DIO_BUTTON);
-				vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-				vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上りに設定）
+				u32InputSubMask = 1UL<<PORT_INPUT2;
+
+				/* 複数入力を使用する場合 */
+				if(IS_MULTI_INPUT()){
+					vPortAsInput( PORT_INPUT3 );
+					vPortAsInput( PORT_SDA );
+					u32InputMask |= 1UL<<PORT_INPUT3;
+					u32InputSubMask |= 1UL<<PORT_SDA;
+				}
+
+				vAHI_DioSetPullup( 0, u32InputMask|u32InputSubMask ); // 内部プルアップを無効
+				vAHI_DioWakeEnable( u32InputMask|u32InputSubMask , 0 ); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge( u32InputSubMask, u32InputMask ); // 割り込みエッジ
 			}else{
-				vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-				vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
+				/* 複数入力を使用する場合 */
+				if(IS_MULTI_INPUT()){
+					vPortAsInput( PORT_INPUT2 );
+					vPortAsInput( PORT_INPUT3 );
+					vPortAsInput( PORT_SDA );
+					u32InputMask |= 1UL<<PORT_INPUT2;
+					u32InputMask |= 1UL<<PORT_INPUT3;
+					u32InputMask |= 1UL<<PORT_SDA;
+				}
+
+				if( IS_INVERSE_INT() ){	// 立上りを見る場合
+					vAHI_DioSetPullup( 0, u32InputMask ); // 内部プルアップを無効
+					vAHI_DioWakeEnable( u32InputMask, 0 ); // also use as DIO WAKE SOURCE
+					vAHI_DioWakeEdge( u32InputMask, 0 ); // 割り込みエッジ
+				}else{
+					vAHI_DioWakeEnable( u32InputMask, 0 ); // also use as DIO WAKE SOURCE
+					vAHI_DioWakeEdge( 0 ,u32InputMask ); // 割り込みエッジ
+				}
 			}
 
 			// 連照してDI1の状態を確定する場合
-			if( sAppData.sFlash.sData.i16param&0x200 ){
-				sAppData.sBTM_Config.bmPortMask = PORT_INPUT_MASK;
+			if( IS_INPUT_TIMER() ){
+				sAppData.sBTM_Config.bmPortMask = u32InputMask;
 				sAppData.sBTM_Config.u16Tick_ms = 1;
 				//sAppData.sBTM_Config.u8MaxHistory = 20;
 				sAppData.sBTM_Config.u8MaxHistory = sAppData.sFlash.sData.u8wait;
@@ -756,6 +884,9 @@ static void vInitHardware(int f_warm_start) {
 				sAppData.pr_BTM_handler = prBTM_InitExternal(&sAppData.sBTM_Config);
 				vBTM_Enable();
 			}
+
+			u32DioPortWakeUp = u32InputMask|u32InputSubMask;
+
 		}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
 			if(sAppData.sFlash.sData.i16param&AIRVOLUME){
 				vPortAsInput(PORT_INPUT2);
@@ -784,56 +915,6 @@ static void vInitHardware(int f_warm_start) {
 		}
 	}
 #endif
-
-	// Serial Port の初期化
-	{
-		tsUartOpt sUartOpt;
-		memset(&sUartOpt, 0, sizeof(tsUartOpt));
-		uint32 u32baud = UART_BAUD;
-
-		// BPS ピンが Lo の時は 38400bps
-		vPortAsInput(PORT_BAUD);
-		if (sAppData.bFlashLoaded && (bPortRead(PORT_BAUD) || IS_APPCONF_OPT_UART_FORCE_SETTINGS() )) {
-			u32baud = sAppData.sFlash.sData.u32baud_safe;
-			sUartOpt.bHwFlowEnabled = FALSE;
-			sUartOpt.bParityEnabled = UART_PARITY_ENABLE;
-			sUartOpt.u8ParityType = UART_PARITY_TYPE;
-			sUartOpt.u8StopBit = UART_STOPBITS;
-
-			// 設定されている場合は、設定値を採用する (v1.0.3)
-			switch(sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_PARITY_MASK) {
-			case 0:
-				sUartOpt.bParityEnabled = FALSE;
-				break;
-			case 1:
-				sUartOpt.bParityEnabled = TRUE;
-				sUartOpt.u8ParityType = E_AHI_UART_ODD_PARITY;
-				break;
-			case 2:
-				sUartOpt.bParityEnabled = TRUE;
-				sUartOpt.u8ParityType = E_AHI_UART_EVEN_PARITY;
-				break;
-			}
-
-			// ストップビット
-			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_STOPBIT_MASK) {
-				sUartOpt.u8StopBit = E_AHI_UART_2_STOP_BITS;
-			} else {
-				sUartOpt.u8StopBit = E_AHI_UART_1_STOP_BIT;
-			}
-
-			// 7bitモード
-			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_WORDLEN_MASK) {
-				sUartOpt.u8WordLen = 7;
-			} else {
-				sUartOpt.u8WordLen = 8;
-			}
-
-			vSerialInit(u32baud, &sUartOpt);
-		} else {
-			vSerialInit(u32baud, NULL);
-		}
-	}
 
 	if( (0x31 <=  sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) || sAppData.sFlash.sData.u8mode == 0xD1 ){
 		// SMBUS の初期化
@@ -871,12 +952,8 @@ void vSerialInit(uint32 u32Baud, tsUartOpt *pUartOpt) {
  * 初期化メッセージ
  */
 void vSerInitMessage() {
-	if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 && sAppData.sFlash.sData.i16param == NEKOTTER ){
-		V_PRINTF(LB LB "*** " NEKO_NAME " (ED_Inp) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-	}else{
-		V_PRINTF(LB LB "*** " APP_NAME " (ED_Inp) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
-	}
-	V_PRINTF(LB "* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d Calib=%d",
+	V_PRINTF(LB LB"*** %s (ED_Inp) %d.%02d-%d ***", APP_NAME, VERSION_MAIN, VERSION_SUB, VERSION_VAR);
+	V_PRINTF(LB"* App ID:%08x Long Addr:%08x Short Addr %04x LID %02d Calib=%d",
 			sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(), sToCoNet_AppContext.u16ShortAddress,
 			sAppData.sFlash.sData.u8id,
 			sAppData.sFlash.sData.u16RcClock);
@@ -905,6 +982,12 @@ void vPortSetSns(bool_t bActive)
 	if (IS_APPCONF_OPT_INVERSE_SNS_ACTIVE()) {
 		bActive = !bActive;
 	}
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ){
+		bActive = !bActive;
+	}
+
+	//A_PRINTF( LB"%s", bActive?"TRUE":"FALSE" );
+	//A_FLUSH();
 
 	vPortSet_TrueAsLo(DIO_SNS_POWER, bActive);
 }

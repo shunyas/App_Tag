@@ -161,7 +161,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_FLUSH();
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
 		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);

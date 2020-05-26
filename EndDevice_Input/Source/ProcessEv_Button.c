@@ -27,7 +27,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// 起床メッセージ
 		vSerInitMessage();
 
-		if( sAppData.sFlash.sData.i16param&0x100 ){
+		if( IS_ENABLE_WDT() ){
 			// WDTにパルスを送る
 			vPortSetHi(3);
 		}
@@ -44,8 +44,12 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 				// 入力待ち状態へ遷移
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_INPUT);
 			}else{
-				vPortSetSns(FALSE);
-				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+				if( IS_TIMER_MODE() ){
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_INPUT);
+				}else{
+					vPortSetSns(FALSE);
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+				}
 			}
 		} else {
 			// 開始する
@@ -63,7 +67,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			}
 
 			// 最初にパケットを送りたくないのでチャタリング対策状態へ遷移後、割り込みがあるまでスリープ
-			if( sAppData.sFlash.sData.i16param&0x04 ){		//	スリープしない場合
+			if( IS_SWING_MODE() ){		//	スリープしない場合
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_INPUT);
 			}else{
 				vPortSetSns(FALSE);
@@ -76,25 +80,30 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_INPUT, tsEvent *pEv, teEvent eEvent, uint32 u32evarg){
 	bool_t bBtnSet = FALSE;
-	if( sAppData.sFlash.sData.i16param&0x200 ){
+	if( IS_INPUT_TIMER() ){
 		//V_PRINTF(LB"! TIMER");
 		if ( eEvent == E_ORDER_KICK && u32evarg == END_INPUT ) { // キックされたのでDIの状態が確定した
 			V_PRINTF(LB"! TIMER: %d, %d", ToCoNet_Event_u32TickFrNewState(pEv), u32evarg);
 
-			if( (((sAppData.sFlash.sData.i16param&0x00FF) == 0x00) && DI_Bitmap == 0x01 ) ||	// Hi -> Lo
-				(((sAppData.sFlash.sData.i16param&0x00FF) == 0x01) && DI_Bitmap == 0x00 ) ||	// Lo -> Hi
-				(sAppData.sFlash.sData.i16param&0x00FF == 0x02) ||							// 両方のエッジ
-				(sAppData.sFlash.sData.i16param&0x00FF == 0x04)){							// SWING
+			if( (((sAppData.sFlash.sData.i16param&0x00FF) == 0x00) && DI_Bitmap ) ||	// どこかのピンがLoだったら
+				( IS_INVERSE_INT() && (DI_Bitmap&u32InputMask) != u32InputMask ) ||	// どこかのピンがHiだったら
+				( IS_DBLEDGE_INT() ) ||							// 両方のエッジ
+				( IS_SWING_MODE() )) {							// SWING
 				bBtnSet = TRUE;
 			}
 		}
 	}else{
 		DI_Bitmap = bPortRead(DIO_BUTTON) ? 0x01 : 0x00;
+		if( IS_MULTI_INPUT() ){
+			DI_Bitmap |= bPortRead(PORT_INPUT2) ? 0x02 : 0x00;
+			DI_Bitmap |= bPortRead(PORT_INPUT3) ? 0x04 : 0x00;
+			DI_Bitmap |= bPortRead(PORT_SDA) ? 0x08 : 0x00;
+		}
 		bBtnSet = TRUE;
 	}
 
 	if( bBtnSet ){
-		if( sAppData.sFlash.sData.i16param&0x4 ){
+		if( IS_SWING_MODE() ){
 			vPortDisablePullup(DIO_BUTTON);
 		}
 		ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
@@ -103,7 +112,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_INPUT, tsEvent *pEv, teEvent eEvent, uint32 u
 	// タイムアウトの場合はノイズだと思ってスリープする
 	if (ToCoNet_Event_u32TickFrNewState(pEv) > 100) {
 		V_PRINTF(LB"! TIME OUT (E_STATE_APP_WAIT_INPUT)");
-		V_FLUSH();
+		//V_FLUSH();
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 	}
 }
@@ -145,14 +154,15 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 			q = au8Data;
 			S_OCTET(sAppData.sSns.u8Batt);
 			S_BE_WORD(sAppData.sSns.u16Adc1);
-			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+			if( IS_SWING_MODE() ){
 				S_BE_WORD(u16RandNum);
 			}else{
 				S_BE_WORD(sAppData.sSns.u16Adc2);
 			}
 
 			//	立ち上がりで起動 or 立ち下がりで起動
-			S_OCTET(sAppData.sFlash.sData.i16param&0xFF);
+			uint16 u16mode = (sAppData.sFlash.sData.i16param&0xFF)+(sAppData.bWakeupByButton?0x00:0x80);
+			S_OCTET(u16mode);
 
 			/*	DIの入力状態を取得	*/
 			S_OCTET( DI_Bitmap );
@@ -165,14 +175,14 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		if ( bOk ) {
 			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 			V_PRINTF(LB"TxOk");
-			if( sAppData.sFlash.sData.i16param&0x4 ){
+			if( IS_SWING_MODE() ){
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
 			}else{
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
 			}
 		} else {
 			V_PRINTF(LB"TxFl");
-			if( sAppData.sFlash.sData.i16param&0x4 ){
+			if( IS_SWING_MODE() ){
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
 			}else{
 				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
@@ -186,7 +196,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 /*	送信完了状態	*/
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_ORDER_KICK  && u32evarg == END_TX ) { // 送信完了イベントが来たのでスリープする
-		if( sAppData.sFlash.sData.i16param&0x02 ){
+		if( IS_DBLEDGE_INT() ){
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // チャタリング無視
 		}else{
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP); // スリープ状態へ遷移
@@ -207,9 +217,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_CHAT_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u
 
 		//	割り込み禁止でスリープ
 		pEv->bKeepStateOnSetAll = TRUE;		//	この状態から起床
-		vAHI_DioWakeEnable(0, PORT_INPUT_MASK|PORT_INPUT_SUBMASK); // DISABLE DIO WAKE SOURCE
+		vAHI_DioWakeEnable(0, u32InputMask|u32InputSubMask); // DISABLE DIO WAKE SOURCE
 
-		if( sAppData.sFlash.sData.i16param&0x100 ){
+		if( IS_ENABLE_WDT() ){
 			// WDTにパルスを送る
 			vPortSetLo(3);
 		}
@@ -218,6 +228,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_CHAT_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u
 	/*	起床後すぐこの状態になったときずっと眠る状態へ	*/
 	}else if(eEvent == E_EVENT_START_UP){
 		pEv->bKeepStateOnSetAll = FALSE;
+		vPortSetSns(FALSE);
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 	}
 }
@@ -230,36 +241,40 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_FLUSH();
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 	}
 
 	// タイムアウト
-	if (ToCoNet_Event_u32TickFrNewState(pEv) > 20 || (sAppData.sFlash.sData.i16param&0x100) == 0 ) {
+	if (ToCoNet_Event_u32TickFrNewState(pEv) > 20 || !IS_ENABLE_WDT() ) {
 		// print message.
 		vAHI_UartDisable(UART_PORT); // UART を解除してから(このコードは入っていなくても動作は同じ)
 
 		// set UART Rx port as interrupt source
-		vAHI_DioSetDirection(PORT_INPUT_MASK, 0); // set as input
+		vAHI_DioSetDirection( u32InputMask|u32InputSubMask, 0); // set as input
 
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 
 
-		if( (sAppData.sFlash.sData.i16param&0x02) != 0 ){
-			vAHI_DioWakeEnable( PORT_INPUT_MASK|PORT_INPUT_SUBMASK, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
-		}else if(sAppData.sFlash.sData.i16param == 1){
-			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
+		if( IS_DBLEDGE_INT() ){
+			vAHI_DioWakeEnable( u32InputMask|u32InputSubMask, 0); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge( u32InputSubMask, u32InputMask ); // 割り込みエッジ（立上がりに設定）
+		}else if( IS_INVERSE_INT() ){
+			vAHI_DioWakeEnable( u32InputMask, 0 ); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge( u32InputMask, 0 ); // 割り込みエッジ（立上がりに設定）
 		} else {
-			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
+			vAHI_DioWakeEnable( u32InputMask, 0 ); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge( 0, u32InputMask ); // 割り込みエッジ（立下りに設定）
 		}
 
 		uint32 u32Sleep = 0;
 
-		if( sAppData.sFlash.sData.i16param&0x100 ){
+		if( IS_ENABLE_WDT() ){
 			// WDTにパルスを送る
 			vPortSetLo(3);
+			u32Sleep = sAppData.sFlash.sData.u32Slp;
+		}else if( IS_TIMER_MODE() ){
 			u32Sleep = sAppData.sFlash.sData.u32Slp;
 		}
 
@@ -348,11 +363,13 @@ static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
 	case E_AHI_DEVICE_TICK_TIMER:
 		// ボタンの判定を行う。
-		if( sAppData.sFlash.sData.i16param&0x200 ){
+		if( IS_INPUT_TIMER() ){
 			uint32 bmPorts, bmChanged;
 			if (bBTM_GetState(&bmPorts, &bmChanged)) {
-				//vBTM_Disable();
-				DI_Bitmap = (bmPorts&PORT_INPUT_MASK) ? 0x01 : 0x00;
+				DI_Bitmap = (bmPorts&(1UL<<PORT_INPUT1)) ? 0x01 : 0x00;
+				DI_Bitmap |= (bmPorts&(1UL<<PORT_INPUT2)) ? 0x02 : 0x00;
+				DI_Bitmap |= (bmPorts&(1UL<<PORT_INPUT3)) ? 0x04 : 0x00;
+				DI_Bitmap |= (bmPorts&(1UL<<PORT_SDA)) ? 0x08 : 0x00;
 				ToCoNet_Event_Process(E_ORDER_KICK, END_INPUT, vProcessEvCore);
 			}
 		}

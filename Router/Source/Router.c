@@ -119,7 +119,9 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			sAppData.sNwkLayerTreeConfig.u8TxRetryCtUp = u8retry==0x0F ? 0xFF : u8retry>0x07 ? 0x07 : u8retry;
 
 			sAppData.sNwkLayerTreeConfig.u8Layer = u8layer;
+#ifdef OLDNET
 			sAppData.sNwkLayerTreeConfig.u8MaxSublayers = u8sublayer;
+#endif
 
 			if (IS_APPCONF_OPT_SECURE()) {
 				bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
@@ -128,21 +130,23 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 			// 接続先アドレスの指定
 			if( sAppData.sFlash.sData.u32AddrHigherLayer ){
-				sAppData.sNwkLayerTreeConfig.u8Second_To_Rescan = 0xFF;		// 上位レイヤを再探索しない
-				sAppData.sNwkLayerTreeConfig.u8Second_To_Relocate = 0xFF;	// 上位レイヤと定期ポーリングをしない
-				sAppData.sNwkLayerTreeConfig.u8Ct_To_Relocate = 0xFF;		// 上位レイヤを定期ポーリングを失敗させない
-
-				sAppData.sNwkLayerTreeConfig.u8StartOpt = 0x01;				// 開始時にスキャンしない
+				sAppData.sNwkLayerTreeConfig.u8StartOpt = TOCONET_MOD_LAYERTREE_STARTOPT_FIXED_PARENT;	// 開始時にスキャンしない
 				sAppData.sNwkLayerTreeConfig.u8ResumeOpt = 0x01;			// 過去にあった接続先があると仮定する
 				sAppData.sNwkLayerTreeConfig.u32AddrHigherLayer = (sAppData.sFlash.sData.u32AddrHigherLayer&0x80000000) ? sAppData.sFlash.sData.u32AddrHigherLayer:sAppData.sFlash.sData.u32AddrHigherLayer|0x80000000;
 			}
+#ifndef OLDNET
+			else{
+				sAppData.sNwkLayerTreeConfig.u8StartOpt = TOCONET_MOD_LAYERTREE_STARTOPT_NB_BEACON;				// ビーコン方式のネットワークを使用する
+				sAppData.sNwkLayerTreeConfig.u8Second_To_Beacon = TOCONET_MOD_LAYERTREE_DEFAULT_BEACON_DUR;		// set NB beacon interval
+			}
+#endif
 
 			// Router として始動
 			sAppData.sNwkLayerTreeConfig.u8Role = TOCONET_NWK_ROLE_ROUTER;
 			sAppData.sNwkLayerTreeConfig.u16TxMaxDelayUp_ms = 100;
 			sAppData.pContextNwk = ToCoNet_NwkLyTr_psConfig(&sAppData.sNwkLayerTreeConfig);
 			if (sAppData.pContextNwk) {
-				A_PRINTF(LB "* start router (layer %d.%d)", sAppData.sFlash.sData.u8layer / 4, sAppData.sFlash.sData.u8layer % 4);
+				A_PRINTF(LB "* start router (layer %d.%d)", sAppData.sNwkLayerTreeConfig.u8Layer, sAppData.sNwkLayerTreeConfig.u8MaxSublayers);
 				ToCoNet_Nwk_bInit(sAppData.pContextNwk);
 				ToCoNet_Nwk_bStart(sAppData.pContextNwk);
 				ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);

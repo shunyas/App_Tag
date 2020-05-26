@@ -73,7 +73,7 @@ extern "C" {
  */
 #ifdef LITE2525A
 #define DEFAULT_SLEEP_DUR_ms (500UL)
-#elif CNFMST
+#elif OTA
 #define DEFAULT_SLEEP_DUR_ms (500UL)
 #else
 #define DEFAULT_SLEEP_DUR_ms (5000UL)

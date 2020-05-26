@@ -32,7 +32,7 @@
 /**
  * Sleep の DIO wakeup 用
  */
-const uint32 u32DioPortWakeUp = PORT_INPUT_MASK;
+uint32 u32DioPortWakeUp = PORT_INPUT_MASK;
 
 
 /**
@@ -225,6 +225,7 @@ bool_t bTransmitToAppTwelite( uint8 *pu8Data, uint8 u8Len )
  */
 void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep) {
 #ifdef ENDDEVICE_INPUT
+	vPortSetSns(FALSE);
 	if(IS_APPCONF_OPT_WAKE_RANDOM()){		//	起床ランダムのオプションが立っていた時
 		uint32 u32max = u32SleepDur_ms>>3;		//	だいたい±10%
 		uint32 u32Rand = ToCoNet_u32GetRand();

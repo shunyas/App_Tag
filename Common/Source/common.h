@@ -13,7 +13,7 @@
 
 void vDispInfo(tsFILE *psSerStream, tsToCoNet_NwkLyTr_Context *pc);
 
-extern const uint32 u32DioPortWakeUp;
+uint32 u32DioPortWakeUp;
 void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep);
 void vResetWithMsg(tsFILE *psSerStream, string str);
 
@@ -40,7 +40,10 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_L3GD20 0x37
 #define PKT_ID_S1105902 0x38
 #define PKT_ID_BME280 0x39
+#define PKT_ID_SHT31 0x3A
+#define PKT_ID_SHTC3 0x3B
 #define PKT_ID_IO_TIMER 0x51
+#define PKT_ID_MAX31855 0x61
 #define PKT_ID_UART 0x81
 #define PKT_ID_ADXL345_LOWENERGY 0xA1
 #define PKT_ID_MULTISENSOR 0xD1
@@ -72,6 +75,9 @@ extern const uint8 au8EncKey[];
 #define PORT_INPUT3 11
 #define PORT_INPUT4 16
 #endif	//	USE_MONOSTICK
+
+#define PORT_SDA 15
+#define PORT_SCL 14
 
 #define PORT_CONF1 10
 #define PORT_CONF2 2

@@ -14,7 +14,7 @@
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
-static void vProcessMultiSensor( teEvent eEvent);
+static void vProcessMultiSensor(teEvent eEvent);
 
 static void vSensorInfoReg();
 
@@ -41,6 +41,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
 			V_PRINTF(LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
+			V_FLUSH();
 		} else {
 			// 開始する
 			// start up message
@@ -116,6 +117,12 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 							bBME280_Setting();
 						}
 						break;
+					case PKT_ID_SHT31:
+						vSHT31_Init( (tsObjData_SHT31*)asSnsObjAll[i].tsObjData, &(asSnsObjAll[i].sSnsObj) );
+						break;
+					case PKT_ID_SHTC3:
+						vSHTC3_Init( (tsObjData_SHTC3*)asSnsObjAll[i].tsObjData, &(asSnsObjAll[i].sSnsObj) );
+						break;
 					default:
 						break;
 				}
@@ -125,6 +132,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 					// 即座に完了した時はセンサーが接続されていない、通信エラー等
 					u32sns_cmplt |= (1UL<<(i+1));
 					V_PRINTF(LB "*** 0x%02X comm err?" , asSnsObjAll[i].u8SnsName );
+					V_FLUSH();
 					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
 					return;
 				}
@@ -154,7 +162,8 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 	//V_FLUSH();
 	// 短期間スリープからの起床をしたので、センサーの値をとる
 	if ((eEvent == E_EVENT_START_UP) && (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK)) {
-		V_PRINTF("#");V_FLUSH();
+		V_PRINTF("#");
+		V_FLUSH();
 		vProcessMultiSensor(E_EVENT_START_UP);
 	}
 
@@ -256,6 +265,14 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 						S_BE_WORD(((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Hum);
 						S_BE_WORD(((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Pres );
 						break;
+					case PKT_ID_SHT31:
+						S_BE_WORD(((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_TEMP]);
+						S_BE_WORD(((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_HUMID]);
+						break;
+					case PKT_ID_SHTC3:
+						S_BE_WORD(((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_TEMP]);
+						S_BE_WORD(((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_HUMID]);
+						break;
 					default:
 						break;
 				}
@@ -293,7 +310,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_FLUSH();
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
-		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		if( sAppData.pContextNwk ){
+			ToCoNet_Nwk_bPause(sAppData.pContextNwk);
+		}
 
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
 		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
@@ -524,14 +543,33 @@ static void vProcessMultiSensor( teEvent eEvent) {
 						);
 						break;
 					case PKT_ID_BME280:
-						V_PRINTF(LB"!BME280: %dC %d%% %dhPa",
-								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->i16Temp,
-								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Hum,
+						V_PRINTF(LB"!BME280: %d.%02dC %d.%02d%% %dhPa",
+								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->i16Temp/100,
+								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->i16Temp%100,
+								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Hum/100,
+								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Hum%100,
 								((tsObjData_BME280*)asSnsObjAll[i].tsObjData)->u16Pres );
+						break;
+					case PKT_ID_SHT31:
+						V_PRINTF(LB"!SHT31: %d.%02dC %d.%02d%%",
+								((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_TEMP] / 100,
+								((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_TEMP] % 100,
+								((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_HUMID] / 100,
+								((tsObjData_SHT31*)asSnsObjAll[i].tsObjData)->ai16Result[SHT31_IDX_HUMID] % 100
+						);
+						break;
+					case PKT_ID_SHTC3:
+						V_PRINTF(LB"!SHTC3: %d.%02dC %d.%02d%%",
+								((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_TEMP] / 100,
+								((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_TEMP] % 100,
+								((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_HUMID] / 100,
+								((tsObjData_SHTC3*)asSnsObjAll[i].tsObjData)->ai16Result[SHTC3_IDX_HUMID] % 100
+						);
 						break;
 					default:
 						break;
 					}
+					V_FLUSH();
 				}
 				u32sns_cmplt |= ( 1UL<<(i+1) );
 			}
@@ -606,6 +644,12 @@ static void vSensorInfoReg()
 				break;
 			case 8:
 				asSnsObjAll[i].tsObjData = (void*)&sObjBME280;
+				break;
+			case 9:
+				asSnsObjAll[i].tsObjData = (void*)&sObjSHT31;
+				break;
+			case 10:
+				asSnsObjAll[i].tsObjData = (void*)&sObjSHTC3;
 				break;
 			default:
 				break;

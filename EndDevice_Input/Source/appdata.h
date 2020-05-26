@@ -18,7 +18,7 @@
 typedef struct {
 	// sensor data
 	uint8 u8Batt;
-	uint16 u16Adc1, u16Adc2;
+	uint16 u16Adc1, u16Adc2, u16Adc3, u16Adc4;
 	uint16 u16PC1, u16PC2;
 	uint16 u16Temp, u16Humid;
 } tsSensorData;

@@ -15,7 +15,7 @@
 # チップの選択を行います。指定が無い場合は、外部指定または chipsel.mkの規
 # 定値となります。この変数はファイル名やフォルダ名の決定にも使用されます。
 #
-#TWE_CHIP_MODEL ?= JN5164
+#TWELITE ?= BLUE
 #
 # また TARGET_DIR 変数に .. 、PROJNAME に ../.. のディレクトリ名を格納
 # します。
@@ -51,8 +51,11 @@ APPSRC += flash.c
 
 APPSRC += adc.c
 APPSRC += SMBus.c
+APPSRC += SPI.c
 APPSRC += BH1715.c
 APPSRC += SHT21.c
+APPSRC += SHT31.c
+APPSRC += SHTC3.c
 APPSRC += BME280.c
 APPSRC += S1105902.c
 APPSRC += ADT7410.c
@@ -64,6 +67,7 @@ APPSRC += MPL115A2.c
 APPSRC += LIS3DH.c
 APPSRC += L3GD20.c
 APPSRC += TSL2561.c
+APPSRC += MAX31855.c
 APPSRC += sensor_driver.c
 
 APPSRC += Interactive.c
@@ -81,6 +85,8 @@ APPSRC += ProcessEv_ConfigMaster.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
 APPSRC += ProcessEv_SHT21.c
+APPSRC += ProcessEv_SHT31.c
+APPSRC += ProcessEv_SHTC3.c
 APPSRC += ProcessEv_BME280.c
 APPSRC += ProcessEv_S1105902.c
 APPSRC += ProcessEv_ADT7410.c
@@ -92,6 +98,7 @@ APPSRC += ProcessEv_ADXL345_FIFO.c
 APPSRC += ProcessEv_MPL115A2.c
 APPSRC += ProcessEv_LIS3DH.c
 APPSRC += ProcessEv_L3GD20.c
+APPSRC += ProcessEv_MAX31855.c
 APPSRC += ProcessEv_UART.c
 APPSRC += ProcessEv_MultiSensor.c
 
