@@ -1,7 +1,9 @@
 VERSION_MAIN = 1
-VERSION_SUB  = 4
+VERSION_SUB  = 5
 VERSION_VAR  = 1
 
+# 1.5.1 省エネモードの追加
+# 1.5.0 リモート設定機能を実装 TWE-Lite-2525Aのデフォルト送信先をApp_TweLiteに変更 ADXL345のモードを複数種選択可能
 # 1.4.1 TWE-Lite 2525Aに対応 複数種のI2Cセンサに対応
 # 1.4.0 TWX0003用に機能限定(SHT21のみ動作する 小サイズバイナリ)
 # 1.3.8 書式モード出力で正しい値が出力されなかった

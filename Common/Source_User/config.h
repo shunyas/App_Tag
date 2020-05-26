@@ -47,14 +47,28 @@ extern "C" {
 #define UART_PORT			E_AHI_UART_0
 
 /* Specify the PAN ID and CHANNEL to be used by tags, readers and gateway */
-#define APP_ID              0x67726305
-#define NEKO_ID              0x67726308
+#define APP_TWELITE_ID		0x67720102
+#define APP_ID				0x67726305
+
 #define APP_NAME            "Samp_Monitor"
-#define NEKO_NAME            "Samp_Nekotter"
-#define CHANNEL             15
+#define APP_TWELITE_CHANNEL	18
+#define CHANNEL				15
+
+// ネコッター用設定
+#define NEKO_ID				0x67726308
+#define NEKO_NAME           "Samp_Nekotter"
+
+// リモート設定用
+#define APP_ID_CNFMST       0x67726405
+#define CHANNEL_CNFMST		25
+#define SHORTADDR_CNFMST	0x0F0F
+
+// デフォルトセンサー
 #ifdef TWX0003
 #define DEFAULT_SENSOR		0x31
 #elif LITE2525A
+#define DEFAULT_SENSOR		0x35
+#elif CNFMST
 #define DEFAULT_SENSOR		0x35
 #else
 #define DEFAULT_SENSOR		0x10
@@ -71,8 +85,13 @@ extern "C" {
 /**
  * 子機のデフォルトスリープ周期
  */
+#ifdef LITE2525A
+#define DEFAULT_SLEEP_DUR_ms (500UL)
+#elif CNFMST
+#define DEFAULT_SLEEP_DUR_ms (500UL)
+#else
 #define DEFAULT_SLEEP_DUR_ms (5000UL)
-
+#endif
 /**
  * 温度センサーの利用
  */
@@ -103,8 +122,8 @@ extern "C" {
 #endif
 
 #define PORT_INPUT_MASK ( 1UL << DIO_BUTTON)
-//#define PORT_INPUT_MASK_ADXL345 ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
-#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON ) | (1UL <<  PORT_INPUT3) )
+#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON) | (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
+//#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON ) | (1UL <<  PORT_INPUT3) )
 #define PORT_INPUT_MASK_ACL ( (1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON) )
 
 #ifdef PARENT

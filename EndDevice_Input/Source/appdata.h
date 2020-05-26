@@ -70,6 +70,8 @@ typedef struct {
 	// その他
 	tsFlash sFlash; //!< フラッシュの情報
 	bool_t bFlashLoaded; //!< フラッシュにデータが合った場合は TRUE
+	uint8 u8LedState; //!< LED状態 (0: 消灯 1: 点灯 2: ブリンク)
+	uint32 u32LedTick; //!< Led Tick から一定期間点灯する
 } tsAppData_Ed;
 
 extern tsAppData_Ed sAppData_Ed;

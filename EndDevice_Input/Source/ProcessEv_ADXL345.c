@@ -21,6 +21,8 @@
 
 #include "utils.h"
 
+#include "ccitt8.h"
+
 #include "Interactive.h"
 #include "EndDevice_Input.h"
 
@@ -30,9 +32,11 @@
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
 static void vProcessADXL345(teEvent eEvent);
+static uint8 u8PlayDice( int16* accel );
 static uint8 u8sns_cmplt = 0;
 
 static bool_t bFirst = TRUE;
+static bool_t bLightOff = FALSE;
 
 static tsSnsObj sSnsObj;
 static tsObjData_ADXL345 sObjADXL345;
@@ -42,6 +46,68 @@ enum {
 	E_SNS_ADXL345_CMP = 2,
 	E_SNS_ALL_CMP = 3
 };
+
+//	割り込み判定マクロ
+#define bIS_TAP()  sObjADXL345.u8Interrupt&0x40
+#define bIS_DTAP()  sObjADXL345.u8Interrupt&0x20
+#define bIS_FREEFALL()  sObjADXL345.u8Interrupt&0x04
+#define bIS_ACTIVE()  sObjADXL345.u8Interrupt&0x10
+#define bIS_INACTIVE()  sObjADXL345.u8Interrupt&0x08
+
+//	サイコロの各々の面だったときに送信するデータマクロ
+#define DICE1() \
+	S_OCTET(0x01);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
+
+#define DICE2() \
+	S_OCTET(0x08);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
+
+#define DICE3() \
+	S_OCTET(0x09);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
+
+#define DICE4() \
+	S_OCTET(0x0A);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
+
+#define DICE5() \
+	S_OCTET(0x0B);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
+
+#define DICE6() \
+	S_OCTET(0x0E);\
+	S_OCTET(0x0F);\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x7D );\
+	S_OCTET( 0x00 );\
+	S_OCTET( 0x00 );
 
 /*
  * ADC 計測をしてデータ送信するアプリケーション制御
@@ -70,7 +136,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
-			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.sADXL345Param );
+			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
@@ -154,6 +220,10 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 
 			sTx.u32SrcAddr = ToCoNet_u32GetSerial();
 
+			if (IS_APPCONF_OPT_SECURE() && !IS_APPCONF_OPT_APP_TWELITE() ) {
+				sTx.bSecurePacket = TRUE;
+			}
+
 			if (IS_APPCONF_OPT_TO_ROUTER()) {
 				// ルータがアプリ中で一度受信して、ルータから親機に再配送
 				sTx.u32DstAddr = TOCONET_NWK_ADDR_NEIGHBOUR_ABOVE;
@@ -162,51 +232,180 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 				sTx.u32DstAddr = TOCONET_NWK_ADDR_PARENT;
 			}
 
-			// ペイロードの準備
-			S_OCTET('T');
-			S_OCTET(sAppData.sFlash.sData.u8id);
-			S_BE_WORD(sAppData.u16frame_count);
+			if( !IS_APPCONF_OPT_APP_TWELITE() ){
+				// ペイロードの準備
+				S_OCTET('T');
+				S_OCTET(sAppData.sFlash.sData.u8id);
+				S_BE_WORD(sAppData.u16frame_count);
 
-			S_OCTET(PKT_ID_ADXL345); // パケット識別子
+				S_OCTET(PKT_ID_ADXL345); // パケット識別子
 
-			S_OCTET(sAppData.sSns.u8Batt);
-			S_BE_WORD(sAppData.sSns.u16Adc1);
-			S_BE_WORD(sAppData.sSns.u16Adc2);
-			S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_X]);
-			S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_Y]);
-			S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_Z]);
+				S_OCTET(sAppData.sSns.u8Batt);
+				S_BE_WORD(sAppData.sSns.u16Adc1);
+				S_BE_WORD(sAppData.sSns.u16Adc2);
+				if( sAppData.sFlash.sData.i16param == DICE ){
+					S_BE_WORD(u8PlayDice( sObjADXL345.ai16Result));
+					S_BE_WORD(0x0000);
+					S_BE_WORD(0x0000);
+				}else{
+					S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_X]);
+					S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_Y]);
+					S_BE_WORD(sObjADXL345.ai16Result[ADXL345_IDX_Z]);
+				}
 
-			S_OCTET(sAppData.sFlash.sData.i16param & 0x00FF);
+				if( sAppData.sFlash.sData.i16param == DICE ){
+					S_OCTET( 0xFD );
+				}
+				else
+				if( sAppData.sFlash.sData.i16param == NEKOTTER ){
+					S_OCTET( 0xFF );
+				}
+				else
+				if( bIS_FREEFALL() ){
+					S_OCTET( FREEFALL );
+				}
+				else
+				if( bIS_DTAP() ){
+					S_OCTET( D_TAP );
+				}
+				else
+				if( bIS_TAP() ){
+					S_OCTET( S_TAP );
+				}
+				else
+				if( bIS_INACTIVE() ){
+					S_OCTET( INACTIVE );
+				}
+				else
+				if( bIS_ACTIVE() ){
+					S_OCTET( ACTIVE );
+				}
+				else
+				{
+					S_OCTET( 0x00 );
+				}
 
-			sTx.u8Len = q - sTx.auData; // パケットのサイズ
-			sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
-			sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
-			sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
-			//sTx.u8Retry = 0x81; // 強制２回送信
+				sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
+				sTx.u8Len = q - sTx.auData; // パケットのサイズ
+				sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
+				sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
 
-			V_PRINTF( LB"INT = %02X", sObjADXL345.u8Interrupt );
-
-			if (IS_APPCONF_OPT_SECURE()) {
-				sTx.bSecurePacket = TRUE;
-			}
-
-			vPortAsOutput(LED);
-			if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
-
-				V_PRINTF(LB"TxOk");
 #ifdef LITE2525A
 				vPortSetHi(LED);
 #else
 				vPortSetLo(LED);
 #endif
+				if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
+					V_PRINTF(LB"TxOk");
+					ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
+				} else {
+					V_PRINTF(LB"TxFl");
+					ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
+				}
+			}else{
+				uint8 crc = u8CCITT8((uint8*) &sToCoNet_AppContext.u32AppId, 4);
+				S_OCTET(crc);								//
+				S_OCTET(0x01);								// プロトコルバージョン
+				S_OCTET(0x78);								// アプリケーション論理アドレス
+				S_BE_DWORD(ToCoNet_u32GetSerial());			// シリアル番号
+				S_OCTET(0x00);								// 宛先
+				S_BE_WORD(u32TickCount_ms & 0xFFFF);		// タイムスタンプ
+				S_OCTET(0);									// 中継フラグ
+				S_BE_WORD(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);	//	電源電圧
+				S_OCTET(0);									// 温度(ダミー)
+
+				if( sAppData.sFlash.sData.i16param == DICE ){
+					uint8 u8Dice = u8PlayDice( sObjADXL345.ai16Result );
+
+					switch(u8Dice){
+					case 1:
+						DICE1();
+						break;
+					case 2:
+						DICE2();
+						break;
+					case 3:
+						DICE3();
+						break;
+					case 4:
+						DICE4();
+						break;
+					case 5:
+						DICE5();
+						break;
+					case 6:
+						DICE6();
+						break;
+					}
+				}else{
+					uint8 IOMap = 0;
+					if( bLightOff ){
+						bLightOff = FALSE;
+					}else{
+						if( bIS_FREEFALL() ){
+							IOMap += 1<<2;
+							bLightOff = TRUE;
+						}
+						else
+						if( bIS_DTAP() ){
+							IOMap += 1<<1;
+							bLightOff = TRUE;
+						}
+						else
+						if( bIS_TAP() ){
+							IOMap += 1;
+							bLightOff = TRUE;
+						}
+					}
+					IOMap += bIS_INACTIVE() ? 0 : bIS_ACTIVE() ? 1<<3 : 0;
+
+					// DIO の設定
+					S_OCTET(IOMap);
+					S_OCTET(0x0F);
+
+					uint8	i;
+					uint16	u16v;
+					uint8 u8LSBs = 0;
+					for(i=0; i<3; i++){
+						u16v = ((sObjADXL345.ai16Result[i]+1600)*5)>>3;	//	+-16g -> 0 - 2400 に変換
+						u16v >>= 2;
+
+						uint8 u8MSB = (u16v >> 2) & 0xFF;
+						S_OCTET(u8MSB);
+
+						// 下2bitを u8LSBs に詰める
+						u8LSBs >>= 2;
+						u8LSBs |= ((u16v << 6) & 0xC0);
+					}
+
+					S_OCTET(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT] >> 5);
+					u8LSBs >>= 2;
+					u8LSBs |= ((sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT] << 6) & 0xC0);
+					S_OCTET(u8LSBs);
+				}
+
+				sTx.u8Cmd = 0x02+0; // パケット種別
+				// 送信する
+				sTx.u32DstAddr = TOCONET_MAC_ADDR_BROADCAST; // ブロードキャスト
+				sTx.u32SrcAddr = sToCoNet_AppContext.u16ShortAddress;
+				sTx.bAckReq = FALSE;
+
+				sTx.u8Len = q - sTx.auData; // パケットのサイズ
+				sTx.u8CbId = sAppData.u16frame_count & 0xFF; // TxEvent で通知される番号、送信先には通知されない
+				sTx.u8Seq = sAppData.u16frame_count & 0xFF; // シーケンス番号(送信先に通知される)
+
+#ifdef LITE2525A
+				vPortSetHi(LED);
+#else
+				vPortSetLo(LED);
+#endif
+				ToCoNet_bMacTxReq(&sTx);
 				ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
-			} else {
-				V_PRINTF(LB"TxFl");
-				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 			}
 
 			V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 		}
+
 	}
 	if (eEvent == E_ORDER_KICK) { // 送信完了イベントが来たのでスリープする
 		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // スリープ状態へ遷移
@@ -225,8 +424,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		V_PRINTF(LB"! Sleeping...");
 		V_FLUSH();
 
-		pEv->bKeepStateOnSetAll = FALSE; // スリープ復帰の状態を維持
-
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
@@ -239,16 +436,40 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		vPortSetHi(LED);
 #endif
 		// 周期スリープに入る
-		if(sAppData.sFlash.sData.i16param == NORMAL || sAppData.sFlash.sData.i16param == NEKOTTER ){
-			vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
-		}else{
+		if( !IS_APPCONF_OPT_APP_TWELITE() ||
+			sAppData.sFlash.sData.i16param == DICE ||
+			sAppData.sFlash.sData.i16param == NORMAL ||
+			sAppData.sFlash.sData.i16param == NEKOTTER ){
 			//	割り込みの設定
 			vAHI_DioSetDirection(PORT_INPUT_MASK_ADXL345, 0); // set as input
 			(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 			vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
-			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
+			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
 
-			vSleep(0, FALSE, FALSE);
+			u8Read_Interrupt();	//	加速度センサの割り込みレジスタをクリア
+
+			if( sAppData.sFlash.sData.i16param == NORMAL || sAppData.sFlash.sData.i16param == NEKOTTER || sAppData.sFlash.sData.i16param == DICE ){
+				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
+			}else{
+				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+			}
+		}else{
+			if(bLightOff){
+				vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
+				u8Read_Interrupt();	//	加速度センサの割り込みレジスタをクリア
+				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, sAppData.sFlash.sData.u32Slp, FALSE, FALSE);
+			}
+			else{
+				//	割り込みの設定
+				vAHI_DioSetDirection(PORT_INPUT_MASK_ADXL345, 0); // set as input
+				(void)u32AHI_DioInterruptStatus(); // clear interrupt register
+				vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
+				vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ(立上がりに設定)
+
+				u8Read_Interrupt();	//	加速度センサの割り込みレジスタをクリア
+
+				ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
+			}
 		}
 	}
 }
@@ -429,7 +650,6 @@ static void vProcessADXL345(teEvent eEvent) {
 			ToCoNet_Event_Process(E_ORDER_KICK, 0, vProcessEvCore);
 		}
 	}
-
 }
 
 /**
@@ -452,4 +672,63 @@ static void vStoreSensorValue() {
 
 	// センサー用の電源制御回路を Hi に戻す
 	vPortSetSns(FALSE);
+}
+
+/**
+ *
+ */
+static uint8 u8PlayDice( int16* accel )
+{
+	int16 max = -30000;
+	int16 min = 30000;
+	uint8 max_a = 0, min_a = 0;
+	uint8 i;
+
+	uint8 u8Dice = 0;
+
+	for( i=0; i<3; i++ ){
+		if( max < accel[i] ){
+			max = accel[i];
+			max_a = i;
+		}
+		if( min > accel[i] ){
+			min = accel[i];
+			min_a = i;
+		}
+	}
+	if( min < 0 ){
+		min = -min;
+		V_PRINTF(LB"Abs Min");		//	これなくすとWarning
+	}
+	if( max < 0 ){
+		max = -max;
+		V_PRINTF(LB"Abs Max");		//	これなくすとWarning
+	}
+
+	if( max > min ){
+		switch(max_a){
+		case 0:
+			u8Dice = 5;
+			break;
+		case 1:
+			u8Dice = 4;
+			break;
+		case 2:
+			u8Dice = 1;
+			break;
+		}
+	}else{
+		switch(min_a){
+		case 0:
+			u8Dice = 2;
+			break;
+		case 1:
+			u8Dice = 3;
+			break;
+		case 2:
+			u8Dice = 6;
+			break;
+		}
+	}
+	return u8Dice;
 }

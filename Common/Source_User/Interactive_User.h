@@ -53,6 +53,13 @@
 #define IS_APPCONF_OPT_SECURE() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_SECURE) != 0) //!< E_APPCONF_OPT_SECURE 判定
 
 /**
+ * ADXL345のACTIVE/INACTIVE検出モードでLINK(Active -> INACTIVE -> ACYIVE　-> ...)を無効にする。
+ */
+#define E_APPCONF_OPT_ADXL345_DISABLE_LINK 0x00002000UL
+#define IS_APPCONF_OPT_ADXL345_DISABLE_LINK() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_ADXL345_DISABLE_LINK) != 0) //!< E_APPCONF_OPT_ADXL345_DISABLE_LINK 判定
+
+
+/**
  * 定義済みの場合、各ルータまたは親機宛に送信し、ルータから親機宛のパケットを
  * 送信する受信したルータすべての情報が親機に転送されることになる。
  * この場合、複数の受信パケットを分析する事で一番近くで受信したルータを特定
@@ -65,17 +72,22 @@
 #define IS_APPCONF_OPT_TO_ROUTER() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_TO_ROUTER) != 0) //!< E_APPCONF_OPT_TO_ROUTER 判定
 
 /**
- * DOOR タイマー動作を有効にする
+ * 親機を標準アプリにする(2525A用)
  */
-#define E_APPCONF_OPT_DOOR_TIMER 0x00000010UL
-#define IS_APPCONF_OPT_DOOR_TIMER() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_DOOR_TIMER) != 0) //!< E_APPCONF_OPT_DOOR_TIMER 判定
+#define E_APPCONF_OPT_APP_TWELITE 0x00000010UL
+#define IS_APPCONF_OPT_APP_TWELITE() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_APP_TWELITE) != 0) //!< E_APPCONF_OPT_DOOR_TIMER 判定
 
 /**
- * SHT21 センサーを有効にする(子機の場合)
- * SHT21 センサー時の出力を SimpleTag v3 互換のセミコロン区切りにする(親機)
+ * 親機のUART出力を SimpleTag v3 互換のセミコロン区切りにする
  */
 #define E_APPCONF_OPT_SHT21 0x00000020UL
 #define IS_APPCONF_OPT_SHT21() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_SHT21) != 0) //!< E_APPCONF_OPT_SHT21 判定
+
+/**
+ * 親機のUART出力を SimpleTag v3 互換のセミコロン区切りにする
+ */
+#define E_APPCONF_OPT_2525A 0x00000040UL
+#define IS_APPCONF_OPT_2525A() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_2525A) != 0) //!< E_APPCONF_OPT_SHT21 判定
 
 /**
  * UARTアプリを有効にする
@@ -88,6 +100,12 @@
  */
 #define E_APPCONF_OPT_UART_BIN 0x00000200UL
 #define IS_APPCONF_OPT_UART_BIN() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_UART_BIN) != 0) //!< E_APPCONF_OPT_UART_BIN 判定
+
+/**
+ * 子機の電源投入時の設定モードへの遷移を飛ばす
+ */
+#define E_APPCONF_OPT_PASS_SETTINGS 0x00000400UL
+#define IS_APPCONF_OPT_PASS_SETTINGS() ((sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_PASS_SETTINGS) != 0) //!< E_APPCONF_OPT_PASS_SETTINGS 判定
 
 /**
  * SNS アクティブピンの出力を反転させる (Hi Active)
@@ -104,5 +122,5 @@
 /**
  * UART ボーレート設定の強制
  */
-#define E_APPCONF_OPT_UART_FORCE_SETTINGS 0x40000UL
+#define E_APPCONF_OPT_UART_FORCE_SETTINGS 0x00040000UL
 #define IS_APPCONF_OPT_UART_FORCE_SETTINGS() (sAppData.sFlash.sData.u32Opt & E_APPCONF_OPT_UART_FORCE_SETTINGS) //!< E_APPCONF_OPT_UART_FORCE_SETTINGS 判定

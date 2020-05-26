@@ -52,6 +52,13 @@ void Interactive_vSetMode(bool_t bVerbose, uint16 u16screen_refresh);
 bool_t Interactive_bGetMode();
 
 bool_t Config_bLoad(tsFlash *p);
+bool_t Config_bSave();
+
+bool_t Config_bUnSerialize(uint8 *pu8dat, uint16 u16len, uint8 u8fmt);
+uint16 Config_u16Serialize(uint8 *pu8dat, uint16 u16len, uint8 u8fmt);
+
+void Config_vUpdateScreen();
+
 void vHandleSerialInput();
 
 extern void vSerInitMessage();

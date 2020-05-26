@@ -30,6 +30,7 @@ void vDispInfo(tsFILE *psSerStream, tsToCoNet_NwkLyTr_Context *pc);
 
 extern const uint32 u32DioPortWakeUp;
 void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep);
+void vResetWithMsg(tsFILE *psSerStream, string str);
 
 bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Len);
 
@@ -52,6 +53,7 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_S1105902 0x38
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
+#define PKT_ID_ADXL345_LOWENERGY 0xA1
 #define PKT_ID_BUTTON 0xFE
 
 /*

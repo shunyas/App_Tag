@@ -112,10 +112,12 @@ void vInitAppMPL115A2();
 void vInitAppLIS3DH();
 void vInitAppL3GD20();
 void vInitAppADXL345();
+void vInitAppADXL345_LowEnergy();
 void vInitAppTSL2561();
 void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();
+void vInitAppConfigMaster();
 
 void vPortSetSns(bool_t bActive);
 

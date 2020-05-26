@@ -24,23 +24,12 @@ extern "C" {
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define ADXL345_IDX_X 0
-#define ADXL345_IDX_Y 1
-#define ADXL345_IDX_Z 2
+#define ADXL345_LOWENERGY_IDX_X 0
+#define ADXL345_LOWENERGY_IDX_Y 1
+#define ADXL345_LOWENERGY_IDX_Z 2
 
-#define ADXL345_IDX_BEGIN 0
-#define ADXL345_IDX_END (ADXL345_IDX_Z+1) // should be (last idx + 1)
-
-
-#define NORMAL				0
-#define S_TAP				1
-#define D_TAP				2
-#define FREEFALL			4
-#define ACTIVE				8
-#define INACTIVE			16
-#define NEKOTTER			256
-#define DICE				512
-
+#define ADXL345_LOWENERGY_IDX_BEGIN 0
+#define ADXL345_LOWENERGY_IDX_END (ADXL345_LOWENERGY_IDX_Z+1) // should be (last idx + 1)
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
@@ -63,21 +52,17 @@ typedef struct {
 /****************************************************************************/
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
-void vADXL345_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
-bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink );
-void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
+void vADXL345_LowEnergy_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
+bool_t bADXL345_LowEnergy_Setting();
+void vADXL345_LowEnergy_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
 
-PUBLIC bool_t bADXL345reset();
-PUBLIC bool_t bADXL345startRead();
-PUBLIC int16 i16ADXL345readResult( uint8 u8axis );
-PUBLIC bool_t bNekotterreadResult( int16* ai16accel );
-uint8 u8Read_Interrupt( void );
+PUBLIC bool_t bADXL345_LowEnergyReset();
+PUBLIC bool_t bADXL345_LowEnergyStartRead();
+PUBLIC int16 i16ADXL345_LowEnergyReadResult( uint8 u8axis );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
-extern uint8 u8Interrupt;
-
 #if defined __cplusplus
 }
 #endif

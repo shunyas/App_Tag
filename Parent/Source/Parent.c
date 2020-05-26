@@ -77,6 +77,7 @@ static void vInitHardware(int f_warm_start);
 static void vSerialInit(uint32 u32Baud, tsUartOpt *pUartOpt);
 
 void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p);
+void vSerOutput_2525A(tsRxPktInfo sRxPktInfo, uint8 *p);
 void vSerOutput_SmplTag3(tsRxPktInfo sRxPktInfo, uint8 *p);
 void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p);
 
@@ -263,6 +264,8 @@ void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		// 出力用の関数を呼び出す
 		if (IS_APPCONF_OPT_SHT21()) {
 			vSerOutput_SmplTag3( sRxPktInfo, p);
+		} else if (IS_APPCONF_OPT_2525A()) {
+			vSerOutput_2525A( sRxPktInfo, p);
 		} else if (IS_APPCONF_OPT_UART()) {
 			vSerOutput_Uart(sRxPktInfo, p);
 		} else {
@@ -1241,35 +1244,35 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint8 u8bitmap = G_OCTET();
 
 		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04x;"			// モード
-				"%04d;"			//
-				"%04d;"			// adc1
-				"%04d;"			// adc2
-				"%0c;"			// パケット識別子
-				"%04d;"			// x
-				"%04d;"			// y
-				"%04d;"			// z
-				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u8bitmap,
-				0,
-				u16adc1,
-				u16adc2,
-				'X',
-				i16x,
-				i16y,
-				i16z
+			"%d;"			// TIME STAMP
+			"%08X;"			// 受信機のアドレス
+			"%03d;"			// LQI  (0-255)
+			"%03d;"			// 連番
+			"%07x;"			// シリアル番号
+			"%04d;"			// 電源電圧 (0-3600, mV)
+			"%04x;"			// モード
+			"%04d;"			//
+			"%04d;"			// adc1
+			"%04d;"			// adc2
+			"%0c;"			// パケット識別子
+			"%04d;"			// x
+			"%04d;"			// y
+			"%04d;"			// z
+			LB,
+			u32TickCount_ms / 1000,
+			sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+			sRxPktInfo.u8lqi_1st,
+			sRxPktInfo.u16fct,
+			sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+			DECODE_VOLT(u8batt),
+			u8bitmap,
+			0,
+			u16adc1,
+			u16adc2,
+			'X',
+			i16x,
+			i16y,
+			i16z
 		);
 
 #ifdef USE_LCD
@@ -1568,6 +1571,43 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 	}
 }
 
+/**
+ * TWE-Lite-2525A 用の出力
+ */
+void vSerOutput_2525A( tsRxPktInfo sRxPktInfo, uint8 *p) {
+	if (sRxPktInfo.u8pkt == PKT_ID_ADXL345) {
+		uint8 u8batt = G_OCTET(); (void)u8batt;
+		uint16 u16adc1 = G_BE_WORD(); (void)u16adc1;
+		uint16 u16adc2 = G_BE_WORD(); (void)u16adc2;
+		int16 i16x = G_BE_WORD();
+		int16 i16y = G_BE_WORD();
+		int16 i16z = G_BE_WORD();
+		uint8 u8bitmap = G_OCTET();
+
+		if( u8bitmap == 0xFF ){			//	猫
+		}else if(u8bitmap == 0xFE){		//	サイコロ
+		}else{
+			A_PRINTF("%d;", u32TickCount_ms / 1000 );
+			if( (u8bitmap&0x01) != 0){
+				A_PRINTF("TAP;");
+			}
+			if( (u8bitmap&0x02) != 0){
+				A_PRINTF("DOUBLE TAP;");
+			}
+			if( (u8bitmap&0x04) != 0){
+				A_PRINTF("FREEFALL;");
+			}
+			if( (u8bitmap&0x08) != 0){
+				A_PRINTF("ACTIVE;");
+			}
+			if( (u8bitmap&0x10) != 0){
+				A_PRINTF("INACTIVE;");
+			}
+			A_PRINTF( "%04d;%04d;%04d;", i16x,i16y, i16z );
+			A_PRINTF(LB);
+		}
+	}
+}
 
 /**
  * UART形式の出力

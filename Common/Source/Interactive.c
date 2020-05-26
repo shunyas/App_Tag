@@ -80,7 +80,8 @@ static void vProcessInputByte_Command(int16 i16Char);
 static void vProcessInputByte(uint8 u8Byte);
 static void vProcessInputString(tsInpStr_Context *pContext);
 
-static void vConfig_SaveAndReset();
+static void vConfig_Update(tsFlashApp *pFlash);
+
 static void vConfig_UnSetAll(tsFlashApp *p);
 static void Config_vSetDefaults(tsFlashApp *p);
 static void vSerUpdateScreen();
@@ -95,12 +96,7 @@ void vProcessSerialCmd();
  * インタラクティブモードの初期化
  */
 void Interactive_vInit() {
-	memset(&sConfig_UnSaved, 0xFF, sizeof(tsFlashApp));
-#ifdef ENDDEVICE_INPUT
-	sConfig_UnSaved.i16param = INIT_VAL_i16;
-	sConfig_UnSaved.bFlagParam = FALSE;
-	memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
-#endif
+	vConfig_UnSetAll(&sConfig_UnSaved);
 
 	INPSTR_vInit(&sSerInpStr, &sSerStream);
 
@@ -199,6 +195,15 @@ static void vProcessInputByte_Command(int16 i16Char) {
 	}
 }
 
+/** @ingroup INTERACTIVE
+ * インタラクティブモードの画面更新を強制します。
+ */
+void Config_vUpdateScreen() {
+	u16HoldUpdateScreen = 0;
+	if (sSerCmd_P3.bverbose) {
+		vSerUpdateScreen();
+	}
+}
 
 /** @ingroup INTERACTIVE
  * シリアルポートからの入力を処理します。
@@ -407,12 +412,22 @@ static void vProcessInputByte(uint8 u8Byte) {
 			// R S と連続入力された場合は、フラッシュエリアを消去する
 			V_PRINTF("!INF CLEAR SAVE AREA.");
 			bFlash_Erase(FLASH_SECTOR_NUMBER - 1); // SECTOR ERASE
-
-			vWait(1000000);
-			vAHI_SwReset();
 		} else {
-			vConfig_SaveAndReset();
+			bool_t bRet = Config_bSave();
+			V_PRINTF("!INF FlashWrite %s"LB, bRet ? "Success" : "Failed");
 		}
+
+		V_PRINTF("!INF RESET SYSTEM...");
+		vWait(1000000);
+#ifdef ENDDEVICE_INPUT
+#ifndef CNFMST
+		vSleep(100,FALSE,TRUE);
+#else
+		vAHI_SwReset();
+#endif
+#else
+		vAHI_SwReset();
+#endif
 		break;
 
 	case 'R':
@@ -443,9 +458,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 	case '!':
 		// リセット
-		V_PRINTF("!INF RESET SYSTEM.");
-		vWait(1000000);
-		vAHI_SwReset();
+		vResetWithMsg(&sSerStream, "!INF RESET SYSTEM.");
 		break;
 
 	case '#': // info
@@ -885,79 +898,155 @@ bool_t Config_bLoad(tsFlash *p) {
 static void vConfig_UnSetAll(tsFlashApp *p) {
 	memset(p, 0xFF, sizeof(tsFlashApp));
 #ifdef ENDDEVICE_INPUT
+	sConfig_UnSaved.i16param = INIT_VAL_i16;
+	sConfig_UnSaved.bFlagParam = FALSE;
+	memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
 	p->i16param = INIT_VAL_i16; // signed 型についてはマイナスの最大値を設定する
 #endif
 }
 
-/** @ingroup FLASH
+/**
  * フラッシュ(またはEEPROM)に保存し、モジュールをリセットする
  */
-static void vConfig_SaveAndReset() {
-	tsFlash sFlash = sAppData.sFlash;
 
+/** @ingroup FLASH
+ * シリアライズされたデータを EEPROM に保存する
+ *
+ * @param pu8dat セーブデータの構造体
+ * @param u16len データ長
+ * @param u8fmt データフォーマット（RAWのみ）
+ * @return
+ */
+bool_t Config_bUnSerialize(uint8 *pu8dat, uint16 u16len, uint8 u8fmt) {
+	bool_t bRet = FALSE;
+
+	if (u16len == sizeof(tsFlashApp)) {
+		memcpy((void*)(&sConfig_UnSaved), pu8dat, u16len);
+		bRet = TRUE;
+	}
+
+	return bRet;
+}
+
+/** @ingroup FLASH
+ * 設定値（未セーブも含め）をシリアライズする
+ *
+ * @param pu8dat バッファ領域
+ * @param u16len バッファ領域の最大サイズ
+ * @param u8fmt データフォーマット（RAWのみ）
+ * @return 0:失敗 以外:データサイズ
+ */
+uint16 Config_u16Serialize(uint8 *pu8dat, uint16 u16len, uint8 u8fmt) {
+	uint16 u16ret = 0;
+
+	// EEPROM 領域のコピーと sConfig_UnSaved の未セーブデータを合成
+	tsFlashApp sTemp = sAppData.sFlash.sData;
+	vConfig_Update(&sTemp);
+
+	if (u8fmt == 0 && u16len >= sizeof(tsFlashApp)) {
+		memcpy(pu8dat, &sTemp, sizeof(tsFlashApp));
+		u16ret = sizeof(tsFlashApp);
+	}
+#if 0
+	if (u8fmt == XXX) {
+		tsFlashApp sDefault;
+		vConfig_UnSetAll(&sDefault);
+		Config_vSetDefaults(&sDefault);
+
+		int i;
+		uint8 *q = (void*)&sTemp;
+		uint8 *q_def = (void*)&sDefault;
+
+		// デフォルトと同じデータの場合は 0xFF として送信する
+		for (i = 0; i < sizeof(tsFlashApp); i++, q++, q_def++, pu8dat++) {
+			if (*q == *q_def) {
+				*pu8dat = 0xFF;
+			} else {
+				*pu8dat = *q;
+			}
+		}
+	}
+#endif
+
+	return u16ret;
+}
+
+/** @ingroup FLASH
+ * UnSaved に格納している暫定データを本体に反映させる。
+ */
+static void vConfig_Update(tsFlashApp *pTemp) {
 	if (sConfig_UnSaved.u32appid != 0xFFFFFFFF) {
-		sFlash.sData.u32appid = sConfig_UnSaved.u32appid;
+		pTemp->u32appid = sConfig_UnSaved.u32appid;
 	}
 	if (sConfig_UnSaved.u32chmask != 0xFFFFFFFF) {
-		sFlash.sData.u32chmask = sConfig_UnSaved.u32chmask;
+		pTemp->u32chmask = sConfig_UnSaved.u32chmask;
 	}
 	if (sConfig_UnSaved.u8id != 0xFF) {
-		sFlash.sData.u8id = sConfig_UnSaved.u8id;
+		pTemp->u8id = sConfig_UnSaved.u8id;
 	}
 	if (sConfig_UnSaved.u8ch != 0xFF) {
-		sFlash.sData.u8ch = sConfig_UnSaved.u8ch;
+		pTemp->u8ch = sConfig_UnSaved.u8ch;
 	}
 	if (sConfig_UnSaved.u8pow != 0xFF) {
-		sFlash.sData.u8pow = sConfig_UnSaved.u8pow;
+		pTemp->u8pow = sConfig_UnSaved.u8pow;
 	}
 #ifdef PARENT
 	if (sConfig_UnSaved.u32baud_safe != 0xFFFFFFFF) {
-		sFlash.sData.u32baud_safe = sConfig_UnSaved.u32baud_safe;
+		pTemp->u32baud_safe = sConfig_UnSaved.u32baud_safe;
 	}
 	if (sConfig_UnSaved.u8parity != 0xFF) {
-		sFlash.sData.u8parity = sConfig_UnSaved.u8parity;
+		pTemp->u8parity = sConfig_UnSaved.u8parity;
 	}
 #endif
 	if (sConfig_UnSaved.u32Opt != 0xFFFFFFFF) {
-		sFlash.sData.u32Opt = sConfig_UnSaved.u32Opt;
+		pTemp->u32Opt = sConfig_UnSaved.u32Opt;
 	}
 	if (sConfig_UnSaved.u32EncKey != 0xFFFFFFFF) {
-		sFlash.sData.u32EncKey = sConfig_UnSaved.u32EncKey;
+		pTemp->u32EncKey = sConfig_UnSaved.u32EncKey;
 	}
 #ifdef ENDDEVICE_INPUT
 	if (sConfig_UnSaved.u8wait != 0xFF) {
-		sFlash.sData.u8wait = sConfig_UnSaved.u8wait;
+		pTemp->u8wait = sConfig_UnSaved.u8wait;
 	}
 	if (sConfig_UnSaved.u32Slp != 0xFFFFFFFF) {
-		sFlash.sData.u32Slp = sConfig_UnSaved.u32Slp;
+		pTemp->u32Slp = sConfig_UnSaved.u32Slp;
 	}
 	if (sConfig_UnSaved.u8mode != 0xFF) {
-		sFlash.sData.u8mode = sConfig_UnSaved.u8mode;
+		pTemp->u8mode = sConfig_UnSaved.u8mode;
 	}
 	if ( sConfig_UnSaved.i16param != INIT_VAL_i16) {
-		sFlash.sData.i16param = sConfig_UnSaved.i16param;
+		pTemp->i16param = sConfig_UnSaved.i16param;
 	}
 	if ( sConfig_UnSaved.bFlagParam != FALSE ) {
-		sFlash.sData.sADXL345Param = sConfig_UnSaved.sADXL345Param;
+		pTemp->sADXL345Param = sConfig_UnSaved.sADXL345Param;
 	}
 #endif
 #ifdef ROUTER
 	if (sConfig_UnSaved.u8layer != 0xFF) {
-		sFlash.sData.u8layer = sConfig_UnSaved.u8layer;
+		pTemp->u8layer = sConfig_UnSaved.u8layer;
 	}
 #endif
+}
+
+/** @ingroup FLASH
+ * フラッシュ(またはEEPROM)に保存する。
+ */
+bool_t Config_bSave() {
+	tsFlash sFlash = sAppData.sFlash;
+	vConfig_Update(&sFlash.sData);
 
 	sFlash.sData.u32appkey = APP_ID;
 	sFlash.sData.u32ver = VERSION_U32;
 
 	bool_t bRet = bFlash_Write(&sFlash, FLASH_SECTOR_NUMBER - 1, 0);
-	V_PRINTF("!INF FlashWrite %s"LB, bRet ? "Success" : "Failed");
+
+	// sAppData へ反映
+	sAppData.sFlash.sData = sFlash.sData;
+
 	vConfig_UnSetAll(&sConfig_UnSaved);
 	vWait(100000);
 
-	V_PRINTF("!INF RESET SYSTEM...");
-	vWait(1000000);
-	vAHI_SwReset();
+	return bRet;
 }
 
 /** @ingroup MASTER
@@ -1054,67 +1143,42 @@ static void vSerUpdateScreen() {
 	} else {
 		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_MASTER_i16(param), ' ');
 	}
-	V_PRINTF(" P: set Sensor Parameter2 ( ");//THT=%d, DUR=%d, %d, %d)%c" LB,"
-	if( sConfig_UnSaved.bFlagParam ){
-		if(sConfig_UnSaved.sADXL345Param.u16ThresholdTap != 0){
-			V_PRINTF("THT=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdTap );
+	{
+		V_PRINTF(" P: set Sensor Parameter2 ( ");//THT=%d, DUR=%d, %d, %d)%c" LB,"
+		tsADXL345Param *p = sConfig_UnSaved.bFlagParam ? &sConfig_UnSaved.sADXL345Param : &sAppData.sFlash.sData.sADXL345Param;
+
+		if(p->u16ThresholdTap != 0){
+			V_PRINTF("THT=%d ", p->u16ThresholdTap );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16Duration != 0){
-			V_PRINTF("DUR=%d ", sConfig_UnSaved.sADXL345Param.u16Duration );
+		if(p->u16Duration != 0){
+			V_PRINTF("DUR=%d ", p->u16Duration );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16Latency != 0){
-			V_PRINTF("LAT=%d ", sConfig_UnSaved.sADXL345Param.u16Latency );
+		if(p->u16Latency != 0){
+			V_PRINTF("LAT=%d ", p->u16Latency );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16Window != 0){
-			V_PRINTF("WIN=%d ", sConfig_UnSaved.sADXL345Param.u16Window );
+		if(p->u16Window != 0){
+			V_PRINTF("WIN=%d ", p->u16Window );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall != 0){
-			V_PRINTF("THF=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall );
+		if(p->u16ThresholdFreeFall != 0){
+			V_PRINTF("THF=%d ", p->u16ThresholdFreeFall );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16TimeFreeFall != 0){
-			V_PRINTF("TIF=%d ", sConfig_UnSaved.sADXL345Param.u16TimeFreeFall );
+		if(p->u16TimeFreeFall != 0){
+			V_PRINTF("TIF=%d ", p->u16TimeFreeFall );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16ThresholdActive != 0){
-			V_PRINTF("THA=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdActive );
+		if(p->u16ThresholdActive != 0){
+			V_PRINTF("THA=%d ", p->u16ThresholdActive );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16ThresholdInactive != 0){
-			V_PRINTF("THI=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdInactive );
+		if(p->u16ThresholdInactive != 0){
+			V_PRINTF("THI=%d ", p->u16ThresholdInactive );
 		}
-		if(sConfig_UnSaved.sADXL345Param.u16TimeInactive != 0){
-			V_PRINTF("TII=%d ", sConfig_UnSaved.sADXL345Param.u16TimeInactive );
-		}
-	}else{
-		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap != 0){
-			V_PRINTF("THT=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16Duration != 0){
-			V_PRINTF("DUR=%d ", sAppData.sFlash.sData.sADXL345Param.u16Duration );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16Latency != 0){
-			V_PRINTF("LAT=%d ", sAppData.sFlash.sData.sADXL345Param.u16Latency );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16Window != 0){
-			V_PRINTF("WIN=%d ", sAppData.sFlash.sData.sADXL345Param.u16Window );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall != 0){
-			V_PRINTF("THF=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16TimeFreeFall != 0){
-			V_PRINTF("TIF=%d ", sAppData.sFlash.sData.sADXL345Param.u16TimeFreeFall );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive != 0){
-			V_PRINTF("THA=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive != 0){
-			V_PRINTF("THI=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive );
-		}
-		if(sAppData.sFlash.sData.sADXL345Param.u16TimeInactive != 0){
-			V_PRINTF("TII=%d ", sAppData.sFlash.sData.sADXL345Param.u16TimeInactive );
+		if(p->u16TimeInactive != 0){
+			V_PRINTF("TII=%d ", p->u16TimeInactive );
 		}
 
-	}
-	V_PRINTF(")%c"LB,
+		V_PRINTF(")%c"LB,
 			sConfig_UnSaved.bFlagParam ? '*' : ' ' );
+	}
+
 #endif
 #ifdef PARENT
 	{
@@ -1151,7 +1215,12 @@ static void vSerUpdateScreen() {
 
 	V_PRINTF("---"LB);
 
+#ifdef CNFMST
+	V_PRINTF(" S: save Configuration" LB " R: reset to Defaults" LB);
+	V_PRINTF(" *** POWER ON END DEVICE NEAR THIS CONFIGURATOR ***" LB LB);
+#else
 	V_PRINTF(" S: save Configuration" LB " R: reset to Defaults" LB LB);
+#endif
 	//       0123456789+123456789+123456789+1234567894123456789+123456789+123456789+123456789
 }
 

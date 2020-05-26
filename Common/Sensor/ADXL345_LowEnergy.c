@@ -12,22 +12,22 @@
 /****************************************************************************/
 /***        Include files                                                 ***/
 /****************************************************************************/
+#include<math.h>
+
 #include "jendefs.h"
 #include "AppHardwareApi.h"
 #include "string.h"
-#include <math.h>
+#include "fprintf.h"
 
 #include "sensor_driver.h"
-#include "TSL2561.h"
+#include "ADXL345_LowEnergy.h"
 #include "SMBus.h"
-
-#include "utils.h"
-#include "Interactive.h"
 
 #include "ccitt8.h"
 
-#include <serial.h>
-#include <fprintf.h>
+#include "utils.h"
+
+#include "Interactive.h"
 
 #undef SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
@@ -35,23 +35,62 @@
 # include <fprintf.h>
 extern tsFILE sDebugStream;
 #endif
+tsFILE sSerStream;
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define TSL2561_ADDRESS     (0x39)
+#ifdef LITE2525A
+#define ADXL345_ADDRESS		(0x1D)
+#else
+#define ADXL345_ADDRESS		(0x53)
+#endif
 
-#define TSL2561_DATA0        (0x0C)
-#define TSL2561_DATA1        (0x0E)
+#define ADXL345_CONVTIME    (10)//(24+2) // 24ms MAX
 
-#define TSL2561_CONVTIME    (24+2) // 24ms MAX
+#define ADXL345_DATA_NOTYET	(-32768)
+#define ADXL345_DATA_ERROR	(-32767)
 
-#define CMD 0x80
-#define CREAR 0x40
-#define WORD 0x20
-#define BLOCK 0x10
+#define ADXL345_THRESH_TAP		0x1D
+#define ADXL345_OFSX			0x1E
+#define ADXL345_OFSY			0x1F
+#define ADXL345_OFSZ			0x20
+#define ADXL345_DUR				0x21
+#define ADXL345_LATENT			0x22
+#define ADXL345_WINDOW			0x23
+#define ADXL345_THRESH_ACT		0x24
+#define ADXL345_THRESH_INACT	0x25
+#define ADXL345_TIME_INACT		0x26
+#define ADXL345_ACT_INACT_CTL	0x27
+#define ADXL345_THRESH_FF		0x28
+#define ADXL345_TIME_FF			0x29
+#define ADXL345_TAP_AXES		0x2A
+#define ADXL345_ACT_TAP_STATUS	0x2B
+#define ADXL345_BW_RATE			0x2C
+#define ADXL345_POWER_CTL		0x2D
+#define ADXL345_INT_ENABLE		0x2E
+#define ADXL345_INT_MAP			0x2F
+#define ADXL345_INT_SOURCE		0x30
+#define ADXL345_DATA_FORMAT		0x31
+#define ADXL345_DATAX0			0x32
+#define ADXL345_DATAX1			0x33
+#define ADXL345_DATAY0			0x34
+#define ADXL345_DATAY1			0x35
+#define ADXL345_DATAZ0			0x36
+#define ADXL345_DATAZ1			0x37
+#define ADXL345_FIFO_CTL		0x38
+#define ADXL345_FIFO_STATUS		0x39
 
-#define u32CalcLux(c) u32CalclateLux( GAIN_1X, INTG_13MS, c )
+#define ADXL345_X	ADXL345_DATAX0
+#define ADXL345_Y	ADXL345_DATAY0
+#define ADXL345_Z	ADXL345_DATAZ0
+
+const uint8 ADXL345_LOWENERGY_AXIS[] = {
+		ADXL345_X,
+		ADXL345_Y,
+		ADXL345_Z
+};
+
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -60,8 +99,9 @@ extern tsFILE sDebugStream;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE void vProcessSnsObj_TSL2561(void *pvObj, teEvent eEvent);
-PRIVATE uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data );
+PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
+PRIVATE void vProcessSnsObj_ADXL345_LowEnergy(void *pvObj, teEvent eEvent);
+
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
@@ -69,43 +109,49 @@ PRIVATE uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data );
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
-extern tsFILE sSerStream;
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vTSL2561_Init(tsObjData_TSL2561 *pData, tsSnsObj *pSnsObj) {
+void vADXL345_LowEnergy_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
-	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_TSL2561;
+	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_ADXL345_LowEnergy;
 
-	memset((void*)pData, 0, sizeof(tsObjData_TSL2561));
-
-	uint8 opt = 0x03;
-	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x00, 1, &opt );
+	memset((void*)pData, 0, sizeof(tsObjData_ADXL345));
 }
 
-void vTSL2561_Final(tsObjData_TSL2561 *pData, tsSnsObj *pSnsObj) {
+void vADXL345_LowEnergy_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 	pSnsObj->u8State = E_SNSOBJ_STATE_INACTIVE;
 }
 
+//	センサの設定を記述する関数
+bool_t bADXL345_LowEnergy_Setting()
+{
+	bool_t bOk = TRUE;
+
+	uint8 com = 0x19;		//	Low Power Mode, 100Hz Sampling frequency
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
+	com = 0x0B;		//	Full Resolution Mode, +-16g
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
+	return bOk;
+}
 
 /****************************************************************************
  *
- * NAME: bTSL2561reset
+ * NAME: bADXL345reset
  *
  * DESCRIPTION:
- *   to reset TSL2561 device
+ *   to reset ADXL345 device
  *
  * RETURNS:
  * bool_t	fail or success
  *
  ****************************************************************************/
-PUBLIC bool_t bTSL2561reset( bool_t bMode16 )
+PUBLIC bool_t bADXL345_LowEnergyReset()
 {
 	bool_t bOk = TRUE;
-
 	return bOk;
 }
 
@@ -120,16 +166,18 @@ PUBLIC bool_t bTSL2561reset( bool_t bMode16 )
  * void
  *
  ****************************************************************************/
-PUBLIC bool_t bTSL2561startRead()
+PUBLIC bool_t bADXL345_LowEnergyStartRead()
 {
-	bool_t bOk = TRUE;
+
+	uint8 com = 0x08;		//	Start Measuring
+	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
 
 	return bOk;
 }
 
 /****************************************************************************
  *
- * NAME: u16TSL2561readResult
+ * NAME: u16ADXL345_LowEnergyreadResult
  *
  * DESCRIPTION:
  * Wrapper to read a measurement, followed by a conversion function to work
@@ -144,147 +192,54 @@ PUBLIC bool_t bTSL2561startRead()
  *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC uint32 u32TSL2561readResult( void )
+PUBLIC int16 i16ADXL345_LowEnergyReadResult( uint8 u8axis )
 {
-	bool_t bOk = TRUE;
-	uint32 u32result = 0x00;
-	uint16 data[2];
-	uint8 au8data[2];
-	uint8 command;
-	uint32 Lux;
+	bool_t	bOk = TRUE;
+	int16	i16result=0;
+	uint8	au8data[2];
 
-	command = CMD | WORD | TSL2561_DATA0;
-	bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
-	bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 2, au8data);
-	if (bOk == FALSE) {
-		u32result = (uint16)SENSOR_TAG_DATA_ERROR;
-	}else{
-		data[0] = ((au8data[1] << 8) | au8data[0]);	//	読み込んだ数値を代入
-
-		command = CMD | WORD | TSL2561_DATA1;
-		bOk &= bSMBusWrite(TSL2561_ADDRESS, command, 0, NULL );
-		bOk &= bSMBusSequentialRead(TSL2561_ADDRESS, 2, au8data);
-		if (bOk == FALSE) {
-			u32result = SENSOR_TAG_DATA_ERROR;
-		}
-		data[1] = ((au8data[1] << 8) | au8data[0]);	//	読み込んだ数値を代入
-
-		//	TSL2561FN 照度の計算
-		Lux = u32CalcLux(data);
-
-		u32result = Lux;
+	//	各軸の読み込み
+	switch( u8axis ){
+		case ADXL345_LOWENERGY_IDX_X:
+			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_X, au8data );
+			break;
+		case ADXL345_LOWENERGY_IDX_Y:
+			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_Y, au8data );
+			break;
+		case ADXL345_LOWENERGY_IDX_Z:
+			bOk &= bGetAxis( ADXL345_LOWENERGY_IDX_Z, au8data );
+			break;
+		default:
+			bOk = FALSE;
 	}
-#ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rTSL2561 DATA %x", *((uint16*)au8data) );
-#endif
+	i16result = (((au8data[1] << 8) | au8data[0]));
+	i16result = i16result*4/10;			//	1bitあたり4mg  10^-2まで有効
 
-    return u32result;
+	if (bOk == FALSE) {
+		i16result = SENSOR_TAG_DATA_ERROR;
+	}
+
+
+	return i16result;
 }
 
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-
-/****************************************************************************
-	lux equation approximation without floating point calculations
-	Routine: unsigned int CalculateLux(unsigned int ch0, unsigned int ch0, int iType)
-
-	Description: Calculate the approximate illuminance (lux) given the raw
-	channel values of the TSL2560. The equation if implemented
-	as a piece−wise linear approximation.
-
-	Arguments: unsigned int iGain − gain, where 0:1X, 1:16X
-	unsigned int tInt − integration time, where 0:13.7mS, 1:100mS, 2:402mS, 3:Manual
-	unsigned int ch0 − raw channel value from channel 0 of TSL2560
-	unsigned int ch1 − raw channel value from channel 1 of TSL2560
-
-	Return: unsigned int − the approximate illuminance (lux)
-
-****************************************************************************/
-uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data )
+PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
 {
-	uint16 chScale;
-	uint32 channel0, channel1;
+	bool_t bOk = TRUE;
 
-	//	モデルを変えるときは下のコメントアウトを外す。
-	chScale = CHSCALE_TINT0;
-//	switch(u8Intg){
-//		case INTG_13MS:
-//			chScale = CHSCALE_TINT0;
-//			break;
-//		case INTG_101MS:
-//			chScale = CHSCALE_TINT1;
-//			break;
-//		default:
-//			chScale = (1 << CH_SCALE);
-//			break;
-//	}
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_LOWENERGY_AXIS[u8axis], 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 2, au8data );
 
-	if (!u8Gain)
-		chScale = chScale << 4;		// scale 1X to 16X
-
-	// scale the channel values
-	channel0 = (pu16Data[0] * chScale) >> CH_SCALE;
-	channel1 = (pu16Data[1] * chScale) >> CH_SCALE;
-
-	//−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
-	// find the ratio of the channel values (Channel1/Channel0)
-	// protect against divide by zero
-	uint32	ratio1 = 0;
-	if (channel0 != 0)
-		ratio1 = (channel1 << (RATIO_SCALE+1)) / channel0;
-
-	// round the ratio value
-	uint32	ratio = (ratio1 + 1) >> 1;
-	// is ratio <= eachBreak ?
-	uint16	b, m;
-//	A_PRINTF("\r\nratio = %d", ratio);
-
-	if ((ratio >= 0) && (ratio <= K1T)){
-		b=B1T;
-		m=M1T;
-	}else if (ratio <= K2T){
-		b=B2T;
-		m=M2T;
-	}else if (ratio <= K3T){
-		b=B3T;
-		m=M3T;
-	}else if (ratio <= K4T){
-		b=B4T;
-		m=M4T;
-	}else if (ratio <= K5T){
-		b=B5T;
-		m=M5T;
-	}else if (ratio <= K6T){
-		b=B6T;
-		m=M6T;
-	}else if (ratio <= K7T){
-		b=B7T;
-		m=M7T;
-	}else if (ratio > K8T){
-		b=B8T;
-		m=M8T;
-	}
-
-	uint32	temp;
-	temp = ((channel0 * b) - (channel1 * m));
-	// do not allow negative lux value
-	//if (temp < 0){
-	//	temp = 0;
-	//}
-	// round lsb (2^(LUX_SCALE−1))
-	temp += (1 << (LUX_SCALE-1));
-	// strip off fractional portion
-	uint32 u32lux = temp >> LUX_SCALE;
-
-	return u32lux;
+	return bOk;
 }
 
-
 // the Main loop
-PRIVATE void vProcessSnsObj_TSL2561(void *pvObj, teEvent eEvent) {
+PRIVATE void vProcessSnsObj_ADXL345_LowEnergy(void *pvObj, teEvent eEvent) {
 	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
-	tsObjData_TSL2561 *pObj = (tsObjData_TSL2561 *)pSnsObj->pvData;
+	tsObjData_ADXL345 *pObj = (tsObjData_ADXL345 *)pSnsObj->pvData;
 
 	// general process (independent from each state)
 	switch (eEvent) {
@@ -299,7 +254,7 @@ vfPrintf(&sDebugStream, "+");
 		case E_EVENT_START_UP:
 			pObj->u8TickCount = 100; // expire immediately
 #ifdef SERIAL_DEBUG
-vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
+vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 #endif
 			break;
 		default:
@@ -322,7 +277,7 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 			vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_MEASURING);
 
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rTSL2561 KICKED");
+			vfPrintf(&sDebugStream, "\n\rADXL345 KICKED");
 			#endif
 
 			break;
@@ -335,19 +290,21 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 	case E_SNSOBJ_STATE_MEASURING:
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
-			pObj->u32Result = SENSOR_TAG_DATA_ERROR;
-			pObj->u8TickWait = TSL2561_CONVTIME;
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_X] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Y] = SENSOR_TAG_DATA_ERROR;
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Z] = SENSOR_TAG_DATA_ERROR;
+			pObj->u8TickWait = ADXL345_CONVTIME;
 
 			pObj->bBusy = TRUE;
-#ifdef TSL2561_ALWAYS_RESET
+#ifdef ADXL345_ALWAYS_RESET
 			u8reset_flag = TRUE;
-			if (!bTSL2561reset(TURE)) {
+			if (!bADXL345reset()) {
 				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
 			}
 #else
-			//if (!bTSL2561startRead()) { // kick I2C communication
-			//	vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
-			//}
+			if (!bADXL345_LowEnergyStartRead()) { // kick I2C communication
+				vSnsObj_NewState(pSnsObj, E_SNSOBJ_STATE_COMPLETE);
+			}
 #endif
 			pObj->u8TickCount = 0;
 			break;
@@ -358,19 +315,12 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 
 		// wait until completion
 		if (pObj->u8TickCount > pObj->u8TickWait) {
-#ifdef TSL2561_ALWAYS_RESET
-			if (u8reset_flag) {
-				u8reset_flag = 0;
-				if (!bTSL2561startRead()) {
-					vTSL2561_new_state(pObj, E_SNSOBJ_STATE_COMPLETE);
-				}
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_X] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_X);
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Y] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_Y);
+			pObj->ai16Result[ADXL345_LOWENERGY_IDX_Z] = i16ADXL345_LowEnergyReadResult(ADXL345_LOWENERGY_IDX_Z);
 
-				pObj->u8TickCount = 0;
-				pObj->u8TickWait = TSL2561_CONVTIME;
-				break;
-			}
-#endif
-			pObj->u32Result = u32TSL2561readResult();
+			uint8 com = 0x00;		//	End Measuring
+			bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
 
 			// data arrival
 			pObj->bBusy = FALSE;
@@ -382,7 +332,7 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 		switch (eEvent) {
 		case E_EVENT_NEW_STATE:
 			#ifdef SERIAL_DEBUG
-			vfPrintf(&sDebugStream, "\n\rTSL2561_CP: %d", pObj->i16Result);
+			vfPrintf(&sDebugStream, "\n\rADXL345_CP: %d", pObj->i16Result);
 			#endif
 
 			break;
@@ -401,7 +351,6 @@ vfPrintf(&sDebugStream, "\n\rTSL2561 WAKEUP");
 		break;
 	}
 }
-
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

@@ -150,3 +150,15 @@ void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep) {
 	// wake up using wakeup timer as well.
 	ToCoNet_vSleep(E_AHI_WAKE_TIMER_0, u32SleepDur_ms, bPeriodic, bDeep); // PERIODIC RAM OFF SLEEP USING WK0
 }
+
+/** @ingroup MASTER
+ * 文字列表示後リセットする
+ * @param str
+ */
+void vResetWithMsg(tsFILE *psSerStream, string str) {
+	if (str != NULL) {
+		vfPrintf(psSerStream, str);
+		SERIAL_vFlush(psSerStream->u8Device);
+	}
+	vAHI_SwReset();
+}

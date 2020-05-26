@@ -43,19 +43,38 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 
 #ifdef LITE2525A
 	p->u8wait = 0;
+#elif CNFMST
+	p->u8wait = 0;
 #else
 	p->u8wait = 30;
 #endif
 
 	p->u8mode = DEFAULT_SENSOR;
+#ifdef LITE2525A
+	p->i16param = 15;
+#elif CNFMST
+	p->i16param = 15;
+#else
 	p->i16param = 0;
+#endif
+
 	p->bFlagParam = TRUE;
 	memset( &p->sADXL345Param, 0x00, sizeof(tsADXL345Param));
 #endif
 
 	p->u32Opt = E_APPCONF_OPT_TO_ROUTER; // デフォルトの設定ビット
+#ifdef PARENT
 #ifdef TWX0003P
 	p->u32Opt = p->u32Opt | 0x20; // SimpleTagにする
+#endif
+#endif
+
+#ifdef ENDDEVICE_INPUT
+#ifdef LITE2525A
+	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
+#elif CNFMST
+	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
+#endif
 #endif
 
 #ifdef ROUTER

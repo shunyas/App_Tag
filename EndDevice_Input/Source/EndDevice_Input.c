@@ -88,7 +88,7 @@ tsCbHandler *psCbHandler = NULL;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 static void vInitHardware(int f_warm_start);
-#ifndef TWX0003
+#if !(defined(TWX0003) || defined(CNFMST))
 static void vInitPulseCounter();
 #endif
 static void vInitADC();
@@ -110,6 +110,9 @@ tsAppData_Ed sAppData;
 tsFILE sSerStream;
 tsSerialPortSetup sSerPort;
 
+uint8 u8Interrupt;
+uint8 u8PowerUp; // 0x01:from Deep
+
 void *pvProcessEv1, *pvProcessEv2;
 void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 
@@ -126,6 +129,16 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		pvProcessEv1 = NULL;
 		pvProcessEv2 = NULL;
 		pf_cbProcessSerialCmd = NULL;
+
+		// check Deep boot
+		u8PowerUp = 0;
+#ifdef JN514x
+		if (u8AHI_PowerStatus() & 0x01) {
+#elif JN516x
+		if (u16AHI_PowerStatus() & 0x01) {
+#endif
+			u8PowerUp = 0x01;
+		}
 
 		// check DIO source
 		sAppData.bWakeupByButton = FALSE;
@@ -156,18 +169,27 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 #endif
 
 		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
-#ifdef TWX0003
+#if defined(TWX0003)
 		// このポートは入力扱いとして何も設定しない
 		vPortAsInput(DIO_SUPERCAP_CONTROL);
-#else
-#ifdef LITE2525A
+#elif defined(LITE2525A)
 		vPortAsInput(DIO_SUPERCAP_CONTROL);
+#elif defined(CNFMST) // ToCoStick を想定する
+		vPortAsOutput(PORT_OUT1);
+		vAHI_DoSetDataOut(2, 0);
+		bAHI_DoEnableOutputs(TRUE); // MISO を出力用に
 #else
 		vPortSetHi(DIO_SUPERCAP_CONTROL);
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
 #endif
+		//	送信ステータスなどのLEDのための出力
+#ifdef LITE2525A
+		vPortSetLo(LED);
+#else
+		vPortSetHi(LED);
 #endif
+		vPortAsOutput(LED);
 
 		// アプリケーション保持構造体の初期化
 		memset(&sAppData, 0x00, sizeof(sAppData));
@@ -181,7 +203,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 		//	入力ボタンのプルアップを停止する
 		if ((sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER)	// ドアタイマー
-			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
+			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON && sAppData.sFlash.sData.i16param == 1 )){	// 押しボタンの立ち上がり検出時
 			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
 		}
 
@@ -193,8 +215,28 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 #endif
 
 		// configure network
+#ifdef LITE2525A
+		if( sAppData.bFlashLoaded == FALSE ){
+			if( IS_APPCONF_OPT_APP_TWELITE() ){
+				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
+				sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
+			}else{
+				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
+				sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
+			}
+		}else{
+			if( IS_APPCONF_OPT_APP_TWELITE() && sAppData.sFlash.sData.u32appid == APP_ID && sAppData.sFlash.sData.u8ch == CHANNEL ){
+				sToCoNet_AppContext.u32AppId = APP_TWELITE_ID;
+				sToCoNet_AppContext.u8Channel = APP_TWELITE_CHANNEL;
+			}else{
+				sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
+				sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
+			}
+		}
+#else
 		sToCoNet_AppContext.u32AppId = sAppData.sFlash.sData.u32appid;
 		sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
+#endif
 
 		//sToCoNet_AppContext.u8TxMacRetry = 1;
 		sToCoNet_AppContext.bRxOnIdle = FALSE;
@@ -208,24 +250,55 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		sAppData.u32ToCoNetVersion = ToCoNet_u32GetVersion();
 
 		// M2がLoなら、設定モードとして動作する
+#ifdef CNFMST
+		sAppData.bConfigMode = TRUE;
+#else
 		vPortAsInput(PORT_CONF2);
-		if (bPortRead(PORT_CONF2)) {
-			sAppData.bConfigMode = TRUE;
+		if( !u8PowerUp ){
+			if( !IS_APPCONF_OPT_PASS_SETTINGS() || bPortRead(PORT_CONF2) ){
+				sAppData.bConfigMode = TRUE;
+			}
 		}
+#endif
 
 		if (sAppData.bConfigMode) {
 			// 設定モードで起動
+
+			// 設定用のコンフィグ
+			sToCoNet_AppContext.u32AppId = APP_ID_CNFMST;
+			sToCoNet_AppContext.u8Channel = CHANNEL_CNFMST;
+			sToCoNet_AppContext.bRxOnIdle = TRUE;
 
 			// Other Hardware
 			vInitHardware(FALSE);
 
 			// イベント処理の初期化
+#ifdef CNFMST
+			sToCoNet_AppContext.u16ShortAddress = SHORTADDR_CNFMST;
+			vInitAppConfigMaster();
+#else
+			sToCoNet_AppContext.u16ShortAddress = 0x78; // 子機のアドレス（なんでも良い）
 			vInitAppConfig();
-
+#endif
 			// インタラクティブモードの初期化
 			Interactive_vInit();
 		} else
-#ifndef TWX0003
+#if !defined(CNFMST)
+		// SHT21
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppSHT21();
+		} else
+#if !defined(TWX0003)
 		//	ボタン起動モード
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ) {
 			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
@@ -264,22 +337,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppDoorTimer();
-		} else
-#endif
-		// SHT21
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
-			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
-			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
-
-			// ADC の初期化
-			vInitADC();
-
-			// Other Hardware
-			vInitHardware(FALSE);
-
-			// イベント処理の初期化
-			vInitAppSHT21();
-#ifndef TWX0003
 		} else
 		// S11059-02
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_S1105902 ) {
@@ -361,6 +418,20 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppADXL345();
 		} else
+		// ADXL345
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_LOWENERGY ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppADXL345_LowEnergy();
+		} else
 		// TSL2561
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
 				sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -392,8 +463,12 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 
 			// イベント処理の初期化
 			vInitAppStandard();
-#endif
-		}
+		} else
+#endif // TWX0003
+#endif // CNFMST
+	    {
+			;
+		} // 終端の else 節
 
 		// イベント処理関数の登録
 		if (pvProcessEv1) {
@@ -457,6 +532,10 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 
 		// 他のハードの待ち
 		vInitHardware(TRUE);
+		//	ADXL345の場合、割り込みの原因を判別する。
+		if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
+			u8Interrupt = u8Read_Interrupt();
+		}
 
 		if (!sAppData.bWakeupByButton) {
 			// タイマーで起きた
@@ -553,7 +632,7 @@ static void vInitADC() {
  * パルスカウンタの初期化
  * - cold boot 時に1回だけ初期化する
  */
-#ifndef TWX0003
+#if !(defined(TWX0003) || defined(CNFMST))
 static void vInitPulseCounter() {
 	// カウンタの設定
 	bAHI_PulseCounterConfigure(
@@ -601,9 +680,16 @@ static void vInitHardware(int f_warm_start) {
 		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
 	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
+		vPortAsInput(PORT_INPUT2);
 		vPortAsInput(PORT_INPUT3);
+		vPortDisablePullup(PORT_INPUT2);
+		vPortDisablePullup(PORT_INPUT3);
 		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
+	}else if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345_LOWENERGY ) {
+		vPortDisablePullup(PORT_INPUT2);
+		vPortDisablePullup(PORT_INPUT3);
+		vAHI_DioWakeEnable(0, PORT_INPUT_MASK_ADXL345); // DISABLE DIO WAKE SOURCE
 	}
 #endif
 

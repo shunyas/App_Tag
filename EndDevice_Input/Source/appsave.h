@@ -58,8 +58,8 @@ typedef struct _tsFlashApp {
 	uint16 u16RcClock;		//!< RCクロックキャリブレーション
 
 	uint8 u8mode;			//!< センサの種類
-	int16 i16param;		//!< 選択したセンサ特有のパラメータ
-	bool_t bFlagParam;
+	int16 i16param;			//!< 選択したセンサ特有のパラメータ
+	uint8 bFlagParam;		//!< sADXL345Param の格納状況
 	tsADXL345Param sADXL345Param;
 } tsFlashApp;
 
