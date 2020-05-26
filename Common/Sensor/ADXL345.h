@@ -85,6 +85,7 @@ extern "C" {
 #define DIS_ZAXES			4096
 #define DIS_YAXES			8192
 #define DIS_XAXES			16384
+#define POWER_CTRL			32768
 
 #define READ_FIFO 10
 #define READ_FIFO_SHAKE 5

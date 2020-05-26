@@ -8,7 +8,6 @@
  * VERSION
  *************************************************************************/
 
-#include "Version.h"
 #if defined(PARENT)
 # define VERSION_CODE 1
 #elif defined(ROUTER)
