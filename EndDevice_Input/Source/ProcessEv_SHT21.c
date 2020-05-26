@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 
@@ -170,14 +170,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
-#ifndef TWX0003
-		// センサー用の電源制御回路を Hi に戻す
-		vPortSetSns(FALSE);
-#endif
-
-#ifdef TWX0003
-		vPortSetHi(PORT_KIT_LED1);
-#endif
 		// 周期スリープに入る
 		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒
 		vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);

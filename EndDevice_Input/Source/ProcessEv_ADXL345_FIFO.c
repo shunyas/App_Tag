@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 
@@ -58,7 +58,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			V_PRINTF(LB "*** ADXL345 FIFO Setting...");
 			bFirst = FALSE;
 			bADXL345reset();
-			bADXL345_FIFO_Setting();
+			bADXL345_FIFO_Setting(sAppData.sFlash.sData.uParam.sADXL345Param.u16Duration);
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
@@ -149,11 +149,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
 		}
 
-#ifdef LITE2525A
-		vPortSetHi(LED);
-#else
-		vPortSetLo(LED);
-#endif
 		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
 	}
 
@@ -176,15 +171,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
-
-		// センサー用の電源制御回路を Hi に戻す
-		vPortSetSns(FALSE);
-
-#ifdef LITE2525A
-		vPortSetLo(LED);
-#else
-		vPortSetHi(LED);
-#endif
 
 		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // ENABLE DIO WAKE SOURCE
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register

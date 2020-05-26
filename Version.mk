@@ -1,13 +1,14 @@
 ##########################################################################
-# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
-# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
-# AGREEMENT VERSION 1).
+# Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT).
 ##########################################################################
 
 VERSION_MAIN = 2
 VERSION_SUB  = 0
-VERSION_VAR  = 1
+VERSION_VAR  = 2
 
+# 2.0.2 複数センサ対応
 # 2.0.1 Routerの接続先指定をできるように変更
 # 2.0.0 プロジェクト名の変更
 # 1.6.3 TWE-EH-SWINGに対応

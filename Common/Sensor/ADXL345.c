@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -44,7 +44,7 @@ extern tsFILE sDebugStream;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent);
-PRIVATE bool_t bSetFIFO( void );
+//PRIVATE bool_t bSetFIFO( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -326,7 +326,7 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 
 	//	有効にする割り込みの設定
 	com = 0;
-	if( (u16modeflag&SHAKE) != 0 ){
+	if( (u16modeflag&SHAKE) != 0 || (u16modeflag&NEKOTTER) != 0 ){
 		com += 0x02;
 	}else{
 		if( u16modeflag == DICE ){
@@ -441,29 +441,39 @@ PUBLIC bool_t bADXL345startRead()
  *      ReadValue / 1.2 [LUX]
  *
  ****************************************************************************/
-PUBLIC int16 i16ADXL345readResult( uint8 u8axis )
+PUBLIC bool_t bADXL345readResult( int16* ai16accel )
 {
 	bool_t	bOk = TRUE;
-	int16	i16result=0;
-	uint8	au8data[2];
+	uint8	au8data[6];
+	uint8	i;
 
-	bOk &= bGetAxis( u8axis, au8data );
-	i16result = (((au8data[1] << 8) | au8data[0]));
-	i16result = i16result*4/10;			//	1bitあたり4mg  10^-2まで有効
+	GetAxis(bOk, au8data);
+	//	X軸
+	ai16accel[ADXL345_IDX_X] = (((au8data[1] << 8) | au8data[0]));
+	//	Y軸
+	ai16accel[ADXL345_IDX_Y] = (((au8data[3] << 8) | au8data[2]));
+	//	Z軸
+	ai16accel[ADXL345_IDX_Z] = (((au8data[5] << 8) | au8data[4]));
 
 	if (bOk == FALSE) {
-		i16result = SENSOR_TAG_DATA_ERROR;
+		ai16accel[ADXL345_IDX_X] = SENSOR_TAG_DATA_ERROR;
+		ai16accel[ADXL345_IDX_Y] = SENSOR_TAG_DATA_ERROR;
+		ai16accel[ADXL345_IDX_Z] = SENSOR_TAG_DATA_ERROR;
+	}else{
+		for( i=0; i<3; i++ ){
+			ai16accel[i] = (ai16accel[i]<<2)/10;
+		}
 	}
 
 
-	return i16result;
+	return bOk;
 }
 
 PUBLIC bool_t bNekotterreadResult( int16* ai16accel )
 {
 	bool_t	bOk = TRUE;
 	int16	ai16result[3];
-	uint8	au8data[2];
+	uint8	au8data[6];
 	int8	num;
 	uint8	data;
 	uint8	i, j;
@@ -475,18 +485,16 @@ PUBLIC bool_t bNekotterreadResult( int16* ai16accel )
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_STATUS, 0, NULL );
 	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &data );
 
-	num = (int8)(data&0x7f);
+	num = (uint8)(data&0x7f);
 	for( i=0; i<num; i++ ){
 		//	各軸の読み込み
 		//	X軸
-		bOk &= bGetAxis( ADXL345_IDX_X, au8data );
+		GetAxis(bOk, au8data);
 		ai16result[ADXL345_IDX_X] = (((au8data[1] << 8) | au8data[0]));
 		//	Y軸
-		bOk &= bGetAxis( ADXL345_IDX_Y, au8data );
-		ai16result[ADXL345_IDX_Y] = (((au8data[1] << 8) | au8data[0]));
+		ai16result[ADXL345_IDX_Y] = (((au8data[3] << 8) | au8data[2]));
 		//	Z軸
-		bOk &= bGetAxis( ADXL345_IDX_Z, au8data );
-		ai16result[ADXL345_IDX_Z] = (((au8data[1] << 8) | au8data[0]));
+		ai16result[ADXL345_IDX_Z] = (((au8data[5] << 8) | au8data[4]));
 
 		//	総和と二乗和の計算
 		for( j=0; j<3; j++ ){
@@ -505,7 +513,7 @@ PUBLIC bool_t bNekotterreadResult( int16* ai16accel )
 
 	//	ねこったーモードはじめ
 	//	FIFOの設定をもう一度
-	bOk &= bSetFIFO();
+//	bOk &= bSetFIFO();
 	//	終わり
 
     return bOk;
@@ -521,11 +529,11 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 	int16	max = 0x8000;
 	uint8	num;				//	FIFOのデータ数
 	uint8	i;
-	int16	sum[32];
+	int16	sum[READ_FIFO_SHAKE];
 	uint8	count = 0;
-	int16	x[33];
-	int16	y[33];
-	int16	z[33];
+	int16	x[READ_FIFO_SHAKE];
+	int16	y[READ_FIFO_SHAKE];
+	int16	z[READ_FIFO_SHAKE];
 
 	//	FIFOでたまった個数を読み込む
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_STATUS, 0, NULL );
@@ -545,7 +553,7 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 			z[i] = (((au8data[5] << 8) | au8data[4]));
 		}
 		//	FIFOの設定をもう一度
-		bOk &= bSetFIFO();
+		//bOk &= bSetFIFO();
 
 		for( i=0; i<num; i++ ){
 			x[i] = (x[i]<<2)/10;
@@ -583,7 +591,7 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 		ai16TmpAccel[2] = z[num-1];
 	}else{
 		//	FIFOの設定をもう一度
-		bOk &= bSetFIFO();
+//		bOk &= bSetFIFO();
 		ai16accel[0] = 0;
 		ai16accel[1] = 0;
 		ai16accel[2] = 0;
@@ -609,34 +617,20 @@ uint8 u8Read_Interrupt( void )
 	return u8source;
 }
 
-PRIVATE bool_t bSetFIFO( void )
-{
+//PRIVATE bool_t bSetFIFO( void )
+//{
 	//	FIFOの設定をもう一度
-	uint8 com = 0x00 | 0x20 | READ_FIFO_SHAKE;
-	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
-	com = 0xC0 | 0x20 | READ_FIFO_SHAKE;
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+//	uint8 com = 0x00 | 0x20 | READ_FIFO_SHAKE;
+//	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+//	com = 0xC0 | 0x20 | READ_FIFO_SHAKE;
+//	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
 	//	終わり
 
-    return bOk;
-}
+//	return bOk;
+//}
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-PUBLIC bool_t bGetAxis( uint8 u8axis, uint8* au8data )
-{
-	bool_t bOk = TRUE;
-
-	if( u8axis==ADXL345_IDX_X || u8axis==ADXL345_IDX_Y || u8axis==ADXL345_IDX_Z ){
-		bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_AXIS[u8axis], 0, NULL );
-		bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 2, au8data );
-	}else{
-		bOk = FALSE;
-	}
-
-	return bOk;
-}
-
 // the Main loop
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent) {
 	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;
@@ -734,9 +728,7 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 			}else if(u16modeflag == SHAKE){
 				bShakereadResult(pObj->ai16Result);
 			}else{
-				pObj->ai16Result[ADXL345_IDX_X] = i16ADXL345readResult(ADXL345_IDX_X);
-				pObj->ai16Result[ADXL345_IDX_Y] = i16ADXL345readResult(ADXL345_IDX_Y);
-				pObj->ai16Result[ADXL345_IDX_Z] = i16ADXL345readResult(ADXL345_IDX_Z);
+				bADXL345readResult(pObj->ai16Result);
 			}
 
 			// data arrival

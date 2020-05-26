@@ -1,6 +1,6 @@
-/* Copyright (C) 20XX Mono Wireless Inc. All Rights Reserved.    *
- * Released under MNW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE  *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/

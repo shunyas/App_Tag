@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 
@@ -140,7 +140,11 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 /*	送信完了状態	*/
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_ORDER_KICK) { // 送信完了イベントが来たのでスリープする
-		ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP); // スリープ状態へ遷移
+		if((sAppData.sFlash.sData.i16param&0x02) != 0){
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // チャタリング無視
+		}else{
+			ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP); // スリープ状態へ遷移
+		}
 	}
 }
 
@@ -188,7 +192,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 
 
-		if( (sAppData.sFlash.sData.i16param&2) != 0 ){
+		if( (sAppData.sFlash.sData.i16param&0x02) != 0 ){
 			vAHI_DioWakeEnable( PORT_INPUT_MASK|PORT_INPUT_SUBMASK, 0); // also use as DIO WAKE SOURCE
 			vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
 		}else if(sAppData.sFlash.sData.i16param == 1){
@@ -385,9 +389,6 @@ static void vStoreSensorValue() {
 	// パルス数のクリア
 	bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
 #endif
-
-	// センサー用の電源制御回路を Hi に戻す
-	vPortSetSns(FALSE);
 
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];

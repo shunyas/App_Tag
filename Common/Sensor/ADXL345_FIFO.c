@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -41,7 +41,6 @@ extern tsFILE sDebugStream;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void vProcessSnsObj_ADXL345_FIFO(void *pvObj, teEvent eEvent);
-PRIVATE bool_t bSetFIFO( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -64,14 +63,30 @@ void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 	memset((void*)pData, 0, sizeof(tsObjData_ADXL345));
 }
 //	センサの設定を記述する関数
-bool_t bADXL345_FIFO_Setting()
+bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency )
 {
 	uint8 com;
-//	com = 0x09;		//	50Hz Sampling frequency
-	com = 0x0A;		//	100Hz Sampling frequency
-//	com = 0x0B;		//	200Hz Sampling frequency
-//	com = 0x0C;		//	400Hz Sampling frequency
-//	com = 0x0D;		//	800Hz Sampling frequency
+
+	switch( u16SamplingFreqency ){
+	case 50:
+		com = 0x09;		//	50Hz Sampling frequency
+		break;
+	case 100:
+		com = 0x0A;		//	100Hz Sampling frequency
+		break;
+	case 200:
+		com = 0x0B;		//	200Hz Sampling frequency
+		break;
+	case 400:
+		com = 0x0C;		//	400Hz Sampling frequency
+		break;
+	case 800:
+		com = 0x0D;		//	800Hz Sampling frequency
+		break;
+	default:
+		com = 0x0A;		//	100Hz Sampling frequency
+		break;
+	}
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 
 	com = 0x0B;		//	Full Resolution Mode, +-16g
@@ -151,18 +166,6 @@ PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int1
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-PRIVATE bool_t bSetFIFO( void )
-{
-	//	FIFOの設定をもう一度
-	uint8 com = 0x00 | 0x20 | READ_FIFO;
-	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
-	com = 0xC0 | 0x20 | READ_FIFO;
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
-	//	終わり
-
-    return bOk;
-}
-
 // the Main loop
 PRIVATE void vProcessSnsObj_ADXL345_FIFO(void *pvObj, teEvent eEvent) {
 	tsSnsObj *pSnsObj = (tsSnsObj *)pvObj;

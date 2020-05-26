@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #ifndef  ADXL345_INCLUDED
 #define  ADXL345_INCLUDED
@@ -24,6 +24,7 @@ extern "C" {
 #define ADXL345_IDX_BEGIN 0
 #define ADXL345_IDX_END (ADXL345_IDX_Z+1) // should be (last idx + 1)
 
+//#define ADXL345_ADDRESS		(0x53)
 #define ADXL345_ADDRESS		(0x1D)
 
 #define ADXL345_CONVTIME    (0)
@@ -128,12 +129,11 @@ typedef struct {
 void vADXL345_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
 bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink );
 
-PUBLIC bool_t bGetAxis( uint8 u8axis, uint8* au8data );
 PUBLIC bool_t bADXL345reset();
 PUBLIC bool_t bADXL345startRead();
-PUBLIC int16 i16ADXL345readResult( uint8 u8axis );
-PUBLIC bool_t bNekotterreadResult( int16* ai16accel );
-PUBLIC bool_t bShakereadResult( int16* ai16accel );
+PUBLIC bool_t bADXL345readResult( int16* ai16accel );		// 普通に加速度を読み込む
+PUBLIC bool_t bNekotterreadResult( int16* ai16accel );		// 加速度を読み込んで分散をとったものを返す
+PUBLIC bool_t bShakereadResult( int16* ai16accel );			// 加速度の変化量の合計を返す
 
 // LowEnergy
 PUBLIC bool_t bADXL345_LowEnergyStartRead();
@@ -143,8 +143,7 @@ PUBLIC bool_t bADXL345_LowEnergyReadResult( int16* ai16accel );
 
 // fifo
 void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
-bool_t bADXL345_FIFO_Setting();
-
+bool_t bADXL345_FIFO_Setting( uint16 u16SamplingFreqency );
 PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int16* ai16accelz );
 
 // AirVolume

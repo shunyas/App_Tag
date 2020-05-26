@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -461,7 +461,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 	case '#': // info
 		_C {
-			V_PRINTF("*** ToCoNet(ver%08X) ***" LB, ToCoNet_u32GetVersion());
+			V_PRINTF("*** TWELITE NET(ver%08X) ***" LB, ToCoNet_u32GetVersion());
 			V_PRINTF("* AppID %08x, LongAddr, %08x, ShortAddr %04x, Tk: %d" LB,
 					sToCoNet_AppContext.u32AppId, ToCoNet_u32GetSerial(),
 					sToCoNet_AppContext.u16ShortAddress, u32TickCount_ms);
@@ -484,10 +484,10 @@ static void vProcessInputByte(uint8 u8Byte) {
 	case 'V':
 		vSerInitMessage();
 		V_PRINTF("---"LB);
-		V_PRINTF("ToCoNet lib version Core: %08x, Ext: %08x, Utils: %08x"LB,
+		V_PRINTF("TWELITE NET lib version Core: %08x, Ext: %08x, Utils: %08x"LB,
 				ToCoNet_u32GetVersion(), ToCoNet_u32GetVersion_LibEx(),
 				ToCoNet_u32GetVersion_LibUtils());
-		V_PRINTF("ToCoNet Tick Counter: %d"LB, u32TickCount_ms);
+		V_PRINTF("TWELITE NET Tick Counter: %d"LB, u32TickCount_ms);
 		V_PRINTF(""LB);
 		break;
 

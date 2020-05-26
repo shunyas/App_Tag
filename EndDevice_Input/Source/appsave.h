@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #ifndef APPSAVE_H_
 #define APPSAVE_H_
@@ -56,7 +56,6 @@ typedef struct _tsFlashApp {
 	int16 i16param;			//!< 選択したセンサ特有のパラメータ
 	uint8 bFlagParam;		//!< sADXL345Param の格納状況
 	tuParam uParam;
-//	tsADXL345Param sADXL345Param;
 } tsFlashApp;
 
 

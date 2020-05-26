@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -594,6 +594,107 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 	A_PRINTF(":ed=%08X:id=%X", sRxPktInfo.u32addr_1st, sRxPktInfo.u8id);
 
 	switch(sRxPktInfo.u8pkt) {
+	case PKT_ID_MULTISENSOR:
+		_C {
+			uint8 u8batt = G_OCTET();
+			uint16 u16adc1 = G_BE_WORD();
+			uint16 u16adc2 = G_BE_WORD();
+			uint8 u8SnsNum = G_OCTET();
+			// センサー情報
+			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d", DECODE_VOLT(u8batt), u16adc1, u16adc2 );
+			uint8 u8Sensor;
+			uint8 i;
+			for( i=0; i<u8SnsNum; i++ ){
+				u8Sensor = G_OCTET();
+				switch( u8Sensor){
+				case PKT_ID_SHT21:
+				{
+					int16 i16temp = G_BE_WORD();
+					int16 i16humd = G_BE_WORD();
+					A_PRINTF(":te=%04d:hu=%04d", i16temp, i16humd );
+				}
+					break;
+				case PKT_ID_ADT7410:
+				{
+					int16 i16temp = G_BE_WORD();
+					A_PRINTF(":te=%04d", i16temp );
+				}
+					break;
+				case PKT_ID_MPL115A2:
+				{
+					int16 i16atmo = G_BE_WORD();
+					// センサー情報
+					A_PRINTF(":at=%04d", i16atmo );
+				}
+					break;
+				case PKT_ID_LIS3DH:
+				{
+					int16 i16x = G_BE_WORD();
+					int16 i16y = G_BE_WORD();
+					int16 i16z = G_BE_WORD();
+					A_PRINTF(":x=%04d:y=%04d:z=%04d", i16x, i16y, i16z );
+				}
+					break;
+				case PKT_ID_ADXL345:
+				{
+					uint8 u8mode = G_OCTET();
+					A_PRINTF(":md=%02X", u8mode );
+					int16 i16x, i16y, i16z;
+					if( u8mode == 0xfa ){
+						uint8 u8num = G_OCTET();
+						uint8 j;
+						for( j=0; j<u8num; j++ ){
+							i16x = G_BE_WORD();
+							i16y = G_BE_WORD();
+							i16z = G_BE_WORD();
+							A_PRINTF(":x=%04d:y=%04d:z=%04d", i16x, i16y, i16z );
+						}
+					}else{
+						i16x = G_BE_WORD();
+						i16y = G_BE_WORD();
+						i16z = G_BE_WORD();
+						A_PRINTF(":x=%04d:y=%04d:z=%04d", i16x, i16y, i16z );
+					}
+				}
+					break;
+				case PKT_ID_L3GD20:
+				{
+					int16 i16x = G_BE_WORD();
+					int16 i16y = G_BE_WORD();
+					int16 i16z = G_BE_WORD();
+					A_PRINTF(":gx=%04d:gy=%04d:gz=%04d", i16x, i16y, i16z );
+				}
+					break;
+				case PKT_ID_TSL2561:
+				{
+					uint32	u32lux = G_BE_DWORD();
+					A_PRINTF(":lx=%04d", u32lux );
+				}
+				break;
+				case PKT_ID_S1105902:
+				{
+					int16 u16R = G_BE_WORD();
+					int16 u16G = G_BE_WORD();
+					int16 u16B = G_BE_WORD();
+					int16 u16I = G_BE_WORD();
+					A_PRINTF(":re=%04d:gr=%04d:bl=%04d:in:%04d", u16R, u16G, u16B, u16I );
+				}
+				break;
+				case PKT_ID_BME280:
+				{
+					int16	i16temp = G_BE_WORD();
+					uint16	u16hum = G_BE_WORD();
+					uint16	u16atmo = G_BE_WORD();
+					A_PRINTF(":te=%04d:hu=%04d:at=%04d", i16temp, u16hum, u16atmo);
+				}
+				break;
+				default:
+					break;
+				}
+				A_PRINTF(LB);
+			}
+		}
+		break;
 	case PKT_ID_BUTTON:
 		_C {
 			uint8 u8batt = G_OCTET();
@@ -604,7 +705,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint8 u8mode = G_OCTET();(void)u8mode;
 			uint8 u8Bitmap = G_OCTET();
 
-			if(u8mode == 0x04){
+			if(u8mode == 0x04 || u8mode ==  0x02){
 				if(u8Bitmap){
 					vPortSetLo(PORT_OUT1);
 					sAppData.u8DO_State = 1;
@@ -1026,6 +1127,126 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
  * SimpleTag v3 互換 (SHT21 用) の出力
  */
 void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
+	if( sRxPktInfo.u8pkt == PKT_ID_MULTISENSOR ){
+		uint8 u8batt = G_OCTET();
+		uint16 u16adc1 = G_BE_WORD();
+		uint16 u16adc2 = G_BE_WORD();
+		uint8 u8SnsNum = G_OCTET();
+		// センサー情報
+		A_PRINTF( ";"
+				"%d;"			// TIME STAMP
+				"%08X;"			// 受信機のアドレス
+				"%03d;"			// LQI  (0-255)
+				"%03d;"			// 連番
+				"%07x;"			// シリアル番号
+				"%04d;"			// 電源電圧 (0-3600, mV)
+				"%04d;"			// ADC1
+				"%04d;"			// ADC2
+				"%04d;"			// 立ち上がりモード
+				"%04d;"			// DIのビットマップ
+				"%c;",			// 押しボタンフラグ
+				u32TickCount_ms / 1000,
+				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
+				sRxPktInfo.u8lqi_1st,
+				sRxPktInfo.u16fct,
+				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
+				DECODE_VOLT(u8batt),
+				u16adc1,
+				u16adc2,
+				0,
+				0,
+				'W'
+				);
+		uint8 u8Sensor, i;
+		for( i=0; i<u8SnsNum; i++ ){
+			u8Sensor = G_OCTET();
+			switch( u8Sensor){
+				case PKT_ID_SHT21:
+				{
+					int16 i16temp = G_BE_WORD();
+					int16 i16humd = G_BE_WORD();
+					A_PRINTF("S;%04d;%04d;", i16temp, i16humd );
+				}
+				break;
+				case PKT_ID_ADT7410:
+				{
+					int16 i16temp = G_BE_WORD();
+					A_PRINTF("A;%04d;", i16temp );
+				}
+				break;
+				case PKT_ID_MPL115A2:
+				{
+					int16 i16atmo = G_BE_WORD();
+					A_PRINTF("M;%04d;", i16atmo );
+				}
+				break;
+				case PKT_ID_LIS3DH:
+				{
+					int16 i16x = G_BE_WORD();
+					int16 i16y = G_BE_WORD();
+					int16 i16z = G_BE_WORD();
+					A_PRINTF("I;%04d;%04d;%04d;", i16x, i16y, i16z );
+				}
+				break;
+				case PKT_ID_ADXL345:
+				{
+					uint8 u8mode = G_OCTET();
+					A_PRINTF("X;%02X;", u8mode );
+					int16 i16x, i16y, i16z;
+					if( u8mode == 0xfa ){
+						uint8 u8num = G_OCTET();
+						uint8 j;
+						for( j=0; j<u8num; j++ ){
+							i16x = G_BE_WORD();
+							i16y = G_BE_WORD();
+							i16z = G_BE_WORD();
+							A_PRINTF("%04d;%04d;%04d;", i16x, i16y, i16z );
+						}
+					}else{
+						i16x = G_BE_WORD();
+						i16y = G_BE_WORD();
+						i16z = G_BE_WORD();
+						A_PRINTF("%04d;%04d;%04d;", i16x, i16y, i16z );
+					}
+				}
+					break;
+				case PKT_ID_L3GD20:
+				{
+					int16 i16x = G_BE_WORD();
+					int16 i16y = G_BE_WORD();
+					int16 i16z = G_BE_WORD();
+					A_PRINTF("G;%04d;%04d;%04d;", i16x, i16y, i16z );
+				}
+				break;
+				case PKT_ID_TSL2561:
+				{
+					uint32	u32lux = G_BE_DWORD();
+					A_PRINTF("T;%04d;", u32lux );
+				}
+				break;
+				case PKT_ID_S1105902:
+				{
+					int16 u16R = G_BE_WORD();
+					int16 u16G = G_BE_WORD();
+					int16 u16B = G_BE_WORD();
+					int16 u16I = G_BE_WORD();
+					A_PRINTF("C;%04d;%04d;%04d;%04d;", u16R, u16G, u16B, u16I );
+				}
+				break;
+				case PKT_ID_BME280:
+				{
+					int16	i16temp = G_BE_WORD();
+					uint16	u16hum = G_BE_WORD();
+					uint16	u16atmo = G_BE_WORD();
+					A_PRINTF("B;%04d;%04d;%04d:", i16temp, u16hum, u16atmo);
+				}
+				break;
+				default:
+					break;
+			}
+		}
+		A_PRINTF(LB);
+	}
 	//	押しボタン
 	if ( sRxPktInfo.u8pkt == PKT_ID_BUTTON ) {
 		uint8 u8batt = G_OCTET();
@@ -1034,7 +1255,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint8 u8mode = G_OCTET();
 		uint8 u8Bitmap = G_OCTET();
 
-		if(u8mode == 0x04){
+		if(u8mode == 0x04  || u8mode ==  0x02){
 			if(u8Bitmap){
 				vPortSetLo(PORT_OUT1);
 				sAppData.u8DO_State = 1;
@@ -1940,7 +2161,7 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint8	u8mode = G_OCTET();
 			uint8	u8bitmap = G_OCTET();
 
-			if(u8mode == 0x04){
+			if(u8mode == 0x04 || u8mode ==  0x02){
 				if(u8bitmap){
 					vPortSetLo(PORT_OUT1);
 					sAppData.u8DO_State = 1;
@@ -1970,7 +2191,114 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			S_OCTET( sAppData.u8DO_State );
 		}
 		break;
+	case PKT_ID_MULTISENSOR:
+		_C {
+			uint8 u8batt = G_OCTET();
+			uint16 u16adc1 = G_BE_WORD();
+			uint16 u16adc2 = G_BE_WORD();
+			uint8 u8SnsNum = G_OCTET();
 
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(u16adc2);
+			S_OCTET(u8SnsNum);
+
+			uint8 u8Sensor, i;
+			for( i=0; i<u8SnsNum; i++ ){
+				u8Sensor = G_OCTET();
+				S_OCTET(u8Sensor); // batt
+				switch( u8Sensor){
+					case PKT_ID_SHT21:
+					{
+						int16 i16temp = G_BE_WORD();
+						int16 i16humd = G_BE_WORD();
+						S_BE_WORD(i16temp);
+						S_BE_WORD(i16humd);
+					}
+					break;
+					case PKT_ID_ADT7410:
+					{
+						int16 i16temp = G_BE_WORD();
+						S_BE_WORD(i16temp);
+					}
+					break;
+					case PKT_ID_MPL115A2:
+					{
+						int16 i16atmo = G_BE_WORD();
+						S_BE_WORD(i16atmo);
+					}
+					break;
+					case PKT_ID_LIS3DH:
+					case PKT_ID_L3GD20:
+					{
+						int16 i16x = G_BE_WORD();
+						int16 i16y = G_BE_WORD();
+						int16 i16z = G_BE_WORD();
+						S_BE_WORD(i16x);
+						S_BE_WORD(i16y);
+						S_BE_WORD(i16z);
+					}
+					break;
+					case PKT_ID_ADXL345:
+					{
+						uint8 u8mode = G_OCTET();
+						S_OCTET(u8mode);
+						int16 i16x, i16y, i16z;
+						if( u8mode == 0xfa ){
+							uint8 u8num = G_OCTET();
+							uint8 j;
+							for( j=0; j<u8num; j++ ){
+								i16x = G_BE_WORD();
+								i16y = G_BE_WORD();
+								i16z = G_BE_WORD();
+								S_BE_WORD(i16x);
+								S_BE_WORD(i16y);
+								S_BE_WORD(i16z);
+							}
+						}else{
+							i16x = G_BE_WORD();
+							i16y = G_BE_WORD();
+							i16z = G_BE_WORD();
+							S_BE_WORD(i16x);
+							S_BE_WORD(i16y);
+							S_BE_WORD(i16z);
+						}
+					}
+					break;
+					case PKT_ID_TSL2561:
+					{
+						uint32	u32lux = G_BE_DWORD();
+						S_OCTET(u32lux);
+					}
+					break;
+					case PKT_ID_S1105902:
+					{
+						int16 u16R = G_BE_WORD();
+						int16 u16G = G_BE_WORD();
+						int16 u16B = G_BE_WORD();
+						int16 u16I = G_BE_WORD();
+						S_BE_WORD(u16R);
+						S_BE_WORD(u16G);
+						S_BE_WORD(u16B);
+						S_BE_WORD(u16I);
+					}
+					break;
+					case PKT_ID_BME280:
+					{
+						int16	i16temp = G_BE_WORD();
+						uint16	u16hum = G_BE_WORD();
+						uint16	u16atmo = G_BE_WORD();
+						S_BE_WORD(i16temp);
+						S_BE_WORD(u16hum);
+						S_BE_WORD(u16atmo);
+					}
+					break;
+					default:
+						break;
+				}
+			}
+		}
+		break;
 	default:
 		break;
 	}

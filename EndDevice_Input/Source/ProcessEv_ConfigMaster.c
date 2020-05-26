@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 // 詳細は remote_config.h を参照
 
@@ -15,6 +15,8 @@
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static bool_t bTranmitRespond(uint32 u32AddrDst);
+
+uint8 u8pktver;		// 送られてきたパケットバージョン
 
 /**
  * アイドル状態。
@@ -147,32 +149,44 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 	uint8 *p = pRx->auData;
 
 	if (pRx->u8Cmd == RMTCNF_PKTCMD) {
-		// *   OCTET    : パケットバージョン (1)
-		uint8 u8pktver = G_OCTET();
-		if (u8pktver != RMTCNF_PRTCL_VERSION) {
-			V_PRINTF(LB"!PRTCL_VERSION");
-			return;
-		}
-
+		// *   OCTET    : パケットバージョン
+		u8pktver = G_OCTET();
 		// *   OCTET    : パケット種別 (0: 要求, 1: 応答, 2:ACK)
 		uint8 u8pkttyp = G_OCTET();
-
 		// *   OCTET(4) : アプリケーションバージョン
 		uint32 u32ver = G_BE_DWORD();
-		if (u32ver != VERSION_U32) {
-			V_PRINTF(LB"!VERSION_U32");
+
+
+		// プロトコルバージョンの判定
+		if (u8pktver != RMTCNF_PRTCL_VERSION) {
+			V_PRINTF(LB"!PRTCL_VERSION");
+			V_PRINTF(" : %08X PKTVER %d", pRx->u32SrcAddr, u8pktver );
 //			return;
 		}
 
-		// *   パケット種別 = 応答
-		// *   OCTET    : 設定有効化 LQI
-		if (pRx->u8Lqi < RMTCNF_MINLQI ) {
-			V_PRINTF(LB"!LQI");
+		// ファームウェアのバージョンの判定
+		if (u32ver != VERSION_U32) {
+			V_PRINTF(LB"!VERSION_U32");
+			V_PRINTF(" : %08X VER %d.%d.%d", pRx->u32SrcAddr, (u32ver>>16)&0xFF, (u32ver>>8)&0xFF, u32ver&0xFF );
+//			return;
+		}
+
+		// 子機のファームウェアが v2.x未満でパケットバージョンが異なる場合、設定を送り返さない
+		if( (u32ver&0x00FFFFFF) < 0x00020000 && u8pktver != RMTCNF_PRTCL_VERSION ){
+			V_PRINTF(LB"FAILURE %08X"LB, pRx->u32SrcAddr);
 			return;
 		}
 
+		// *   パケット種別 = 応答
 		// 受信パケットに応じて処理を変える
 		if (u8pkttyp == RMTCNF_PKTTYPE_REQUEST) {
+			// *   OCTET    : 設定有効化 LQI
+			if (pRx->u8Lqi < RMTCNF_MINLQI ) {
+				V_PRINTF(LB"!LQI");
+				V_PRINTF(LB"FAILURE %08X"LB, pRx->u32SrcAddr);
+				return;
+			}
+
 			V_PRINTF(LB"!INF REQUEST CONF FR %08X", pRx->u32SrcAddr);
 			bTranmitRespond(pRx->u32SrcAddr);
 
@@ -187,7 +201,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 			if (u8stat) {
 				// LED2 点灯
 				sAppData.u8LedState = 0x03;
-				V_PRINTF(LB"SUCCESS %08X", pRx->u32SrcAddr);
+				V_PRINTF(LB"SUCCESS %08X"LB, pRx->u32SrcAddr);
 			}
 		} else {
 			V_PRINTF(LB"!PKTTYPE_REQUEST", pRx->u32SrcAddr);
@@ -266,8 +280,12 @@ static bool_t bTranmitRespond(uint32 u32AddrDst) {
 	sTx.u32DstAddr = u32AddrDst; // 送信先
 
 	// ペイロードの準備
-	//  *   OCTET    : パケットバージョン (1)
-	S_OCTET(RMTCNF_PRTCL_VERSION);
+	//  *   OCTET    : パケットバージョン
+	if(u8pktver == 1){		// パケットバージョンが1のものから来た時は1にする
+		S_OCTET(1);
+	}else{
+		S_OCTET(RMTCNF_PRTCL_VERSION);
+	}
 	//  *   OCTET    : パケット種別 (0: 要求, 1: 応答, 2:ACK)
 	S_OCTET(RMTCNF_PKTTYPE_DATA);
 	//  *   OCTET(4) : アプリケーションバージョン

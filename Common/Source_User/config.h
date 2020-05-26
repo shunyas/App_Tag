@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #ifndef  CONFIG_H_INCLUDED
 #define  CONFIG_H_INCLUDED
@@ -52,7 +52,7 @@ extern "C" {
 // デフォルトセンサー
 #ifdef LITE2525A
 #define DEFAULT_SENSOR		0x35
-#elif CNFMST
+#elif OTA
 #define DEFAULT_SENSOR		0x35
 #elif SWING
 #define DEFAULT_SENSOR		0xFE
@@ -104,6 +104,13 @@ extern "C" {
 #define DIO_VOLTAGE_CHECKER (PORT_OUT1)		// DO1: 始動後速やかに LO になる
 #define DIO_SUPERCAP_CONTROL (PORT_OUT2)	// DO2: SUPER CAP の電圧が上昇すると LO に設定
 
+#if defined(LITE2525A)
+#define LED_ON(c) vPortSetHi(c);
+#define LED_OFF(c) vPortSetLo(c);
+#else
+#define LED_ON(c) vPortSetLo(c);
+#define LED_OFF(c) vPortSetHi(c);
+#endif
 
 #define LED (5)
 

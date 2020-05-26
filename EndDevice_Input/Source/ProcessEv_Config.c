@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 // 詳細は remote_config.h を参照
 #include <jendefs.h>
@@ -170,11 +170,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 	//	設定親機がいない、設定が完了した以外はLEDを点灯させて永久にスリープ
 	if( u8Flags != 1 && u8Flags != 7 ){
 		sAppData.u8LedState = 1;
-#ifdef LITE2525A
-		vPortSetHi(LED);
-#else
-		vPortSetLo(LED);
-#endif
+		LED_ON(LED);
 		V_PRINTF("!INF: ETERNAL SLEEP %02X", u8Flags);
 		vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
 		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
@@ -237,11 +233,7 @@ static void cbAppToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		if (sAppData.u8LedState == 1 || ((u32TickCount_ms >> 8) & 1)) {
 			bLed = TRUE;
 		}
-#ifdef LITE2525A
-		vPortSet_TrueAsLo(LED, !bLed);
-#else
 		vPortSet_TrueAsLo(LED, bLed);
-#endif
 
 		break;
 
@@ -282,6 +274,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		uint8 u8pktver = G_OCTET();
 		if (u8pktver != RMTCNF_PRTCL_VERSION) {
 			V_PRINTF(LB"!PRTCL_VERSION");
+			V_PRINTF(" : %08X PKTVER %d", pRx->u32SrcAddr, u8pktver );
 			return;
 		}
 
@@ -296,6 +289,7 @@ static void cbAppToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		uint32 u32ver = G_BE_DWORD();
 		if (u32ver != VERSION_U32) {
 			V_PRINTF(LB"!VERSION_U32");
+			V_PRINTF(" : %08X VER %d.%d.%d", pRx->u32SrcAddr, (u32ver>>16)&0xFF, (u32ver>>8)&0xFF, u32ver&0xFF );
 //			return;
 		}
 

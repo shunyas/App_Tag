@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 
 #ifndef COMMON_H_
@@ -43,14 +43,14 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
 #define PKT_ID_ADXL345_LOWENERGY 0xA1
+#define PKT_ID_MULTISENSOR 0xD1
 #define PKT_ID_BUTTON 0xFE
 
 /*
  * 標準ポート定義 (TWE-Lite DIP)
  */
-#if defined(JN516x)
 #if defined (USE_MONOSTICK)
-// ToCoStick 用
+// MONOSTICK 用
 #warning "IO CONF IS FOR MONOSTICK!"
 #define PORT_OUT1 16 // DIO16/18 をスワップ
 #define PORT_OUT2 19
@@ -80,6 +80,5 @@ extern const uint8 au8EncKey[];
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
 
-#endif
 
 #endif /* COMMON_H_ */

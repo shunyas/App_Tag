@@ -2,8 +2,9 @@
  * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
  * AGREEMENT).                                                   */
 
-#ifndef  LIS3DH_INCLUDED
-#define  LIS3DH_INCLUDED
+
+#ifndef  MULTISENSOR_H_INCLUDED
+#define  MULTISENSOR_H_INCLUDED
 
 #if defined __cplusplus
 extern "C" {
@@ -12,56 +13,64 @@ extern "C" {
 /****************************************************************************/
 /***        Include Files                                                 ***/
 /****************************************************************************/
+// センサ類のインクルードファイル
+#include "sensor_driver.h"
+#include "SHT21.h"
+#include "ADT7410.h"
+#include "MPL115A2.h"
+#include "LIS3DH.h"
+#include "ADXL345.h"
+#include "TSL2561.h"
+#include "L3GD20.h"
+#include "S1105902.h"
+#include "BME280.h"
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
-#define LIS3DH_IDX_X 0
-#define LIS3DH_IDX_Y 1
-#define LIS3DH_IDX_Z 2
+#define USE_SHT21		0x00000001
+#define USE_ADT7410		0x00000002
+#define USE_MPL115A2	0x00000004
+#define USE_LIS3DH		0x00000008
+#define USE_ADXL34x		0x00000010
+#define USE_TSL2561		0x00000020
+#define USE_L3GD20		0x00000040
+#define USE_S1105920	0x00000080
+#define USE_BME280		0x00000100
 
-#define LIS3DH_IDX_BEGIN 0
-#define LIS3DH_IDX_END (LIS3DH_IDX_Z+1) // should be (last idx + 1)
+#define MAX_SNS 9
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
 typedef struct {
-	// protected
-	bool_t bBusy;			// should block going into sleep
-
-	// data
-	int16 ai16Result[3];
-
-	// working
-	uint8 u8TickCount, u8TickWait;
-} tsObjData_LIS3DH;
+	uint8 u8SnsName;		// PKT_ID_ ... を入れる
+	bool_t bSnsEnable;		// 該当のセンサが有効かどうか
+	tsSnsObj sSnsObj;		// センサの管理構造体
+	void* tsObjData;		// センサの読み値などを入れる構造体
+//	void (*SnsInit)( );	// センサの初期化をする関数
+} tsSnsObjAll;
 
 /****************************************************************************/
-/***        Exported Functions (state machine)                            ***/
+/***        Exported Functions                                            ***/
 /****************************************************************************/
-
-/****************************************************************************/
-/***        Exported Functions (primitive funcs)                          ***/
-/****************************************************************************/
-void vLIS3DH_Init(tsObjData_LIS3DH *pData, tsSnsObj *pSnsObj );
-void vLIS3DH_Final(tsObjData_LIS3DH *pData, tsSnsObj *pSnsObj);
-
-PUBLIC bool_t bLIS3DHreset();
-PUBLIC bool_t bLIS3DHstartRead();
-PUBLIC int16 i16LIS3DHreadResult( uint8 u8axis );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
+// 各センサごとの取得した値などを入れる構造体
+tsObjData_SHT21 sObjSHT21;
+tsObjData_ADT7410 sObjADT7410;
+tsObjData_MPL115A2 sObjMPL115A2;
+tsObjData_LIS3DH sObjLIS3DH;
+tsObjData_ADXL345 sObjADXL345;
+tsObjData_TSL2561 sObjTSL2561;
+tsObjData_L3GD20 sObjL3GD20;
+tsObjData_S1105902 sObjS1105902;
+tsObjData_BME280 sObjBME280;
 
-#if defined __cplusplus
-}
-#endif
-
-#endif  /* LIS3DH_INCLUDED */
+#endif  /* MULTISENSOR_H_INCLUDED */
 
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/
-

@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 
@@ -271,8 +271,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 	static int16 y[5] = {0,0,0,0,0};
 	static int16 z[5] = {0,0,0,0,0};
 
-	static int16 tmpx = 0, tmpy = 0;
-
 	int16 deg_now = 0;
 
 	static uint8 count = 0;
@@ -337,10 +335,6 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		if( ABS(avez) < 400 ){			// 現在のZ軸にかかっている加速度が0.4g以下になった回数が(実質)連続でENABLE_COUNTER回続いたら計測開始
 			if( count < ENABLE_COUNTER ){
 				count++;
-				if( count == ENABLE_COUNTER ){
-					tmpx = avex;
-					tmpy = avey;
-				}
 			}
 		}else if( ABS(avez) > 700 ){		// 現在のZ軸に0.7g以上かかったら計測をやめる
 			count = 0;
@@ -450,19 +444,16 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 				PortState = FALSE;
 			}
 
-#ifdef LITE2525A
-			vPortSet_TrueAsLo( PORT_INPUT1, !PortState );
-			vPortSet_TrueAsLo( LED, !PortState );
-#else
+			vPortSet_TrueAsLo( PORT_INPUT1, PortState );
 			vPortSet_TrueAsLo( LED, PortState );
-#endif
 		}else{
 #ifdef LITE2525A
 			vPortSetLo(PORT_INPUT1);
-			vPortSetLo(LED);
 #else
-			vPortSetHi(LED);
+			vPortSetHi(PORT_INPUT1);
 #endif
+			LED_OFF(LED);
+
 			i16diff = 0;
 			u16bfDeg = 0;
 			OverFlag = FALSE;
@@ -695,9 +686,6 @@ static void vStoreSensorValue() {
 	if (sAppData.sSns.u16Adc1 >= VOLT_SUPERCAP_CONTROL) {
 		vPortSetLo(DIO_SUPERCAP_CONTROL);
 	}
-
-	// センサー用の電源制御回路を Hi に戻す
-	vPortSetSns(FALSE);
 }
 
 static bool_t bSendToAppTweLiteReq(){

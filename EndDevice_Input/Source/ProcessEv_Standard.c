@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 
@@ -121,7 +121,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 				bias = sAppData.sFlash.sData.i16param;
 
 				S_BE_WORD( bias );		//	バイアス
-				V_PRINTF(LB"%d", bias);
+				//V_PRINTF(LB"%d", bias);
 			}
 
 			bOk = bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data );
@@ -336,9 +336,6 @@ static void vStoreSensorValue() {
 	sAppData.sSns.u16PC1 = 0;
 	sAppData.sSns.u16PC2 = 0;
 #endif
-
-	// センサー用の電源制御回路を Hi に戻す
-	vPortSetSns(FALSE);
 
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];

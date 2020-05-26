@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -206,10 +206,6 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 			// save ADC value
 			pObj->ai16Result[pObj->u8IdxMeasuruing] = (int16)u16AHI_AdcRead();
 
-#ifdef JN516x
-			// 10bit を12bit にシフトしておく (12bit ADC の計算式と混在するとややこしいので)
-			pObj->ai16Result[pObj->u8IdxMeasuruing] <<= 2; // convert to 12bit
-#endif
 #ifdef SERIAL_DEBUG
 			vfPrintf(&sSerStream, "\n\rADC COMPLETE: SRC(%d)->%d", pObj->u8IdxMeasuruing, pObj->ai16Result[pObj->u8IdxMeasuruing]);
 #endif
@@ -217,36 +213,22 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 			// 電源電圧の変換  (ADCVAL -> mV)
 			// 基本的に 2~3.6V を ADC のフルスケールとして測定できるような分圧回路が半導体内部に構成される。
 			// つまりADC値が0なら 2000mV, 4095 なら 3600mV となる。
-			if (   pObj->u8IdxMeasuruing == TEH_ADC_IDX_VOLT
-				&& !IS_SENSOR_TAG_DATA_ERR(pObj->ai16Result[TEH_ADC_IDX_VOLT])) {
+			if (   pObj->u8IdxMeasuruing == TEH_ADC_IDX_VOLT && !IS_SENSOR_TAG_DATA_ERR(pObj->ai16Result[TEH_ADC_IDX_VOLT])) {
 				int16 i16AdcVal = pObj->ai16Result[TEH_ADC_IDX_VOLT];
 
-#ifdef JN514x
-				pObj->ai16Result[TEH_ADC_IDX_VOLT] =
-					(int32)(i16AdcVal) * 100L / 114L; // in mV
-#elif defined(JN516x)
-				// TWE-Lite 用
 				// データシートの情報に基づくなら、2/3 に分圧されていますから、
 				// 10bit最大を 2470mV として mV 値に変換した上、1.5 倍する計算
 				// を行います。
-				pObj->ai16Result[TEH_ADC_IDX_VOLT] = ((int32)(i16AdcVal) * 3705) >> 12;
-#endif
+				pObj->ai16Result[TEH_ADC_IDX_VOLT] = ((int32)(i16AdcVal) * 3705) >> 10;
 			} else
 			// 内蔵温度センサーの変換 (ADCVAL -> 100x degC 23.55℃なら 2355 に変換する)
-			if (   pObj->u8IdxMeasuruing == TEH_ADC_IDX_TEMP
-				&& !IS_SENSOR_TAG_DATA_ERR(pObj->ai16Result[TEH_ADC_IDX_TEMP])) {
+			if (   pObj->u8IdxMeasuruing == TEH_ADC_IDX_TEMP && !IS_SENSOR_TAG_DATA_ERR(pObj->ai16Result[TEH_ADC_IDX_TEMP])) {
 #ifndef USE_TEMP_RAW // USE_TEMP_RAW が定義された場合は、そのままの AD 値を採用
 				int16 i16AdcVal = pObj->ai16Result[TEH_ADC_IDX_TEMP];
-#ifdef JN514x
-				pObj->ai16Result[TEH_ADC_IDX_TEMP] =
-					(25000L - (((int32)(i16AdcVal - 2560L)) * 183L) + 5L) / 10L; // in 100x degC
-#elif defined(JN516x)
 				// TWE-Lite ではデータシートからの計算を行っているが、実測値と大きな隔たりがある。下記の価は利用できない。
 				// 25 - (AdcVal<<2 - 2421[730mV]) * 0.1765
 				// 25000 - (AdcVal<<2 - 2421) * 177
-				pObj->ai16Result[TEH_ADC_IDX_TEMP] =
-					(25000L - (((int32)(i16AdcVal - 2421L)) * 177L) + 5L) / 10L; // in 100x degC
-#endif
+				pObj->ai16Result[TEH_ADC_IDX_TEMP] = (25000L - (((int32)(i16AdcVal - 2421L)) * 177L) + 5L) / 10L; // in 100x degC
 #endif // USE_TEMP_RAW
 			} else {
 				// ADC1-4の値。mVで計算する。
@@ -254,20 +236,10 @@ vfPrintf(&sSerStream, "\n\rE_ADC STARTED %x", au8AdcSrcTable[pObj->u8IdxMeasurui
 				//   相対スケールのADCも欲しい・・・
 				if (pObj->u8InputRangeMask & u8Src) {
 					// 0-1200mV
-					pObj->ai16Result[pObj->u8IdxMeasuruing] =
-#ifdef JN514x
-						pObj->ai16Result[pObj->u8IdxMeasuruing] * 1200 / 4096;
-#elif defined(JN516x)
-						pObj->ai16Result[pObj->u8IdxMeasuruing] * 1235 / 4096;
-#endif
+					pObj->ai16Result[pObj->u8IdxMeasuruing] = pObj->ai16Result[pObj->u8IdxMeasuruing] * 1235 / 1024;
 				} else {
 					// 0-2400mV
-					pObj->ai16Result[pObj->u8IdxMeasuruing] =
-#ifdef JN514x
-						pObj->ai16Result[pObj->u8IdxMeasuruing] * 2400 / 4096;
-#elif defined(JN516x)
-						pObj->ai16Result[pObj->u8IdxMeasuruing] * 2470 / 4096;
-#endif
+					pObj->ai16Result[pObj->u8IdxMeasuruing] = pObj->ai16Result[pObj->u8IdxMeasuruing] * 2470 / 1024;
 				}
 			}
 

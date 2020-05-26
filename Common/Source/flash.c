@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #include <jendefs.h>
 #include <string.h>
@@ -8,9 +8,7 @@
 #include <AppHardwareApi.h>
 #include <AppApi.h>
 
-#ifdef JN516x
-# define USE_EEPROM //!< JN516x でフラッシュを使用する
-#endif
+#define USE_EEPROM //!< JN516x でフラッシュを使用する
 
 #include "flash.h"
 #include "ccitt8.h"

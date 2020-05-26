@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 #ifndef REMOTE_CONFIG_H_
 #define REMOTE_CONFIG_H_
@@ -66,7 +66,7 @@
 
 #define RMTCNF_MINLQI 150 //!< 有効なLQI値
 
-#define RMTCNF_PRTCL_VERSION 1 //!< パケットバージョン
+#define RMTCNF_PRTCL_VERSION 2 //!< パケットバージョン
 
 // パケット種別
 #define RMTCNF_PKTTYPE_REQUEST 0

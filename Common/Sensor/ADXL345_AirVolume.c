@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -73,7 +73,7 @@ bool_t bADXL345_AirVolume_Setting()
 {
 	bool_t bOk = TRUE;
 
-	uint8 com = 0x1A;		//	100Hz Sampling frequency
+	uint8 com = 0x0A;		//	100Hz Sampling frequency
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 	com = 0x0B;		//	Full Resolution Mode, +-16g
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
@@ -128,7 +128,6 @@ PUBLIC bool_t b16ADXL345_AirVolumeReadResult( int16* ai16accel )
 			y[i] = (((au8data[3] << 8) | au8data[2]));
 			z[i] = (((au8data[5] << 8) | au8data[4]));
 		}
-		bOk &= bSetFIFO_Air();
 
 		for( i=0; i<num; i++ ){
 			x[i] = (x[i]<<2);
@@ -150,7 +149,6 @@ PUBLIC bool_t b16ADXL345_AirVolumeReadResult( int16* ai16accel )
 		ai16accel[1] = avey/num;
 		ai16accel[2] = avez/num;
 	}else{
-		bOk &= bSetFIFO_Air();
 		ai16accel[0] = 0;
 		ai16accel[1] = 0;
 		ai16accel[2] = 0;

@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -87,7 +87,7 @@ tsAppData_Ed sAppData;
 tsFILE sSerStream;
 tsSerialPortSetup sSerPort;
 
-uint8 u8Interrupt;
+uint8 u8Interrupt;		// ADXL345
 uint8 u8PowerUp; // 0x01:from Deep
 
 uint8 u8ConfPort  = PORT_CONF2;
@@ -156,7 +156,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
 
 		//	送信ステータスなどのLEDのための出力
-		vPortSetLo(LED);
+		LED_OFF(LED);
 		vPortAsOutput(LED);
 		vPortDisablePullup(LED);
 
@@ -219,7 +219,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		}
 
 #ifdef SWING
-		// DIO1がLoもしくはI2CセンサモードだったらSamp_Monitorモードに変更
+		// DIO1がLoもしくはI2CセンサモードだったらApp_Tagモードに変更
 		vPortAsInput(1);
 		if( (bPortRead(1) &&
 			IS_APPCONF_OPT_APP_TWELITE() &&
@@ -243,7 +243,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			sToCoNet_AppContext.u8Channel = sAppData.sFlash.sData.u8ch;
 		}
 
-		sToCoNet_AppContext.bRxOnIdle = FALSE;
+		sToCoNet_AppContext.bRxOnIdle = FALSE;		// 受信回路は開かない
 
 		sToCoNet_AppContext.u8CCA_Level = 1;
 		sToCoNet_AppContext.u8CCA_Retry = 0;
@@ -482,6 +482,22 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppStandard();
 		} else
+		//	2つセンサを使用する場合
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_MULTISENSOR ) {
+			// 通常アプリで起動
+			sToCoNet_AppContext.u8CPUClk = 3; // runs at 32Mhz
+			sToCoNet_AppContext.u8MacInitPending = TRUE;
+			sToCoNet_AppContext.bSkipBootCalib = FALSE;
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppMultiSensor();
+		} else
 #endif // OTA
 	    {
 			;
@@ -534,7 +550,8 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 
 		// Other Hardware
 		Interactive_vReInit();
-		vSerialInit();
+		// 他のハードの待ち
+		vInitHardware(TRUE);
 
 		// TOCONET DEBUG
 		ToCoNet_vDebugInit(&sSerStream);
@@ -548,8 +565,6 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 			vInitADC();
 		}
 
-		// 他のハードの待ち
-		vInitHardware(TRUE);
 		//	ADXL345の場合、割り込みの原因を判別する。
 		if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
 			u8Interrupt = u8Read_Interrupt();
@@ -560,6 +575,7 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		} else {
 			// ボタンで起床した
 		}
+
 	}
 }
 
@@ -590,6 +606,12 @@ void cbToCoNet_vTxEvent(uint8 u8CbId, uint8 bStatus) {
 			u32TickCount_ms & 0xFFFF,
 			u8CbId
 			);
+
+#ifndef OTA
+	if( !(sAppData.sFlash.sData.u8mode == 0x35 && (sAppData.sFlash.sData.i16param&AIRVOLUME)) ){
+		LED_OFF(LED);
+	}
+#endif
 
 	if (psCbHandler && psCbHandler->pf_cbToCoNet_vTxEvent) {
 		(*psCbHandler->pf_cbToCoNet_vTxEvent)(u8CbId, bStatus);
@@ -810,7 +832,7 @@ static void vInitHardware(int f_warm_start) {
 		}
 	}
 
-	if( 0x31 <=  sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50 ){
+	if( (0x31 <=  sAppData.sFlash.sData.u8mode && sAppData.sFlash.sData.u8mode < 0x50) || sAppData.sFlash.sData.u8mode == 0xD1 ){
 		// SMBUS の初期化
 		vSMBusInit();
 	}

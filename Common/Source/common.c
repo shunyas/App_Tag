@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 
 #include <jendefs.h>
@@ -89,7 +89,13 @@ void vDispInfo(tsFILE *psSerStream, tsToCoNet_NwkLyTr_Context *pc) {
  * @param u8Len ペイロード長
  *
  */
-bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Len) {
+bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Len)
+{
+	if( !(sAppData.sFlash.sData.u8mode == 0x35 && (sAppData.sFlash.sData.i16param&128)) ){
+		LED_ON(LED);
+	}
+	// センサー用の電源制御回路を Hi に戻す
+	vPortSetSns(FALSE);
 
 	// 暗号化鍵の登録
 	if (IS_APPCONF_OPT_SECURE()) {
@@ -122,7 +128,7 @@ bool_t bTransmitToParent(tsToCoNet_Nwk_Context *pNwk, uint8 *pu8Data, uint8 u8Le
 	S_OCTET(sAppData.sFlash.sData.u8id);
 	S_BE_WORD(sAppData.u16frame_count);
 
-	if( sAppData.sFlash.sData.u8mode == 0xA1 || sAppData.sFlash.sData.u8mode == 0xA2 ){
+	if( sAppData.sFlash.sData.u8mode == 0xA1 ){
 		S_OCTET(0x35);	// ADXL345 LowEnergy Mode の時、普通のADXL345として送る
 	}else{
 		S_OCTET(sAppData.sFlash.sData.u8mode); // パケット識別子
@@ -159,6 +165,10 @@ bool_t bTransmitToAppTwelite( uint8 *pu8Data, uint8 u8Len )
 	if( u8Len != 7 ){
 		return FALSE;
 	}
+
+	LED_ON(LED);
+	// センサー用の電源制御回路を Hi に戻す
+	vPortSetSns(FALSE);
 
 	tsTxDataApp sTx;
 	memset(&sTx, 0, sizeof(sTx)); // 必ず０クリアしてから使う！
@@ -237,9 +247,9 @@ void vSleep(uint32 u32SleepDur_ms, bool_t bPeriodic, bool_t bDeep) {
 
 	(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 	vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
-	// vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
-	vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
-	// vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
+	//vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
+	 vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
+	//vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
 
 	// wake up using wakeup timer as well.
 	ToCoNet_vSleep(E_AHI_WAKE_TIMER_0, u32SleepDur_ms, bPeriodic, bDeep); // PERIODIC RAM OFF SLEEP USING WK0

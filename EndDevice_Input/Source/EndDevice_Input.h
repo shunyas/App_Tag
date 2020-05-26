@@ -1,6 +1,6 @@
-/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
- * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
- * AGREEMENT VERSION 1).                                         */
+/* Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT).                                                   */
 
 
 #ifndef  MASTER_H_INCLUDED
@@ -101,6 +101,7 @@ void vInitAppDoorTimer();
 void vInitAppUart();
 void vInitAppConfig();
 void vInitAppConfigMaster();
+void vInitAppMultiSensor();
 
 void vPortSetSns(bool_t bActive);
 

@@ -1,10 +1,10 @@
 ##########################################################################
-# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
-# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
-# AGREEMENT VERSION 1).
+# Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT).
 #
-# MONOWIRELESS MAKEFILE TEMPLATE (for TWE-NET application build)
-# TWE-NET のアプリケーションを作成するための Makefile です。
+# MONOWIRELESS MAKEFILE TEMPLATE (for TWELITE NET application build)
+# TWELITE NET のアプリケーションを作成するための Makefile です。
 #
 # ディレクトリに格納され使用します（サンプルアプリ参照）
 #  {SDKROOT}/ToCoNet/{ApplicationRoot}/{FirmwareType}/Build/
