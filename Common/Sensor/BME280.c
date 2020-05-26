@@ -240,12 +240,12 @@ PUBLIC int16 i16BME280ReadResult( int16* Temp, uint16* Pres, uint16* Hum )
 PRIVATE bool_t bReadTrim()
 {
 	bool_t	bOk = TRUE;
-	uint8	au8data[32];
+	uint8	au8data[33];
 	uint8*	p = au8data;
 
 	bOk &= bSMBusWrite( BME280_ADDRESS, 0x88, 0, NULL );
-	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 25, p );
-	p += 25;
+	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 26, p );
+	p += 26;
 
 	bOk &= bSMBusWrite( BME280_ADDRESS, 0xE1, 0, NULL );
 	bOk &= bSMBusSequentialRead( BME280_ADDRESS, 7, p );
@@ -268,8 +268,8 @@ PRIVATE bool_t bReadTrim()
 	dig_H2 = au8data[26]<<8 | au8data[25];
 	dig_H3 = au8data[27];
 	dig_H4 = au8data[28]<<4 | (au8data[29]&0x0F);
-	dig_H5 = au8data[30]<<4 | ((au8data[29]&0xF0)>>4);
-	dig_H6 = au8data[31];
+	dig_H5 = au8data[30]<<4 | ((au8data[31]&0xF0)>>4);
+	dig_H6 = au8data[32];
 
 	return bOk;
 }

@@ -1,11 +1,13 @@
 {
     "C_Cpp.errorSquiggles": "Enabled",
     "C_Cpp.default.includePath": [
+        "./**",
         "../../Tools/VSCode/**",
         "../../TWENET/current/include/**",
         "../../TWENET/current/src/**"
     ],
     "C_Cpp.default.browse.path": [
+        "./**",
         "../../Tools/VSCode/**",
         "../../TWENET/current/include/**",
         "../../TWENET/current/src/**"

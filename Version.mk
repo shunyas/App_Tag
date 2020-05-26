@@ -6,8 +6,9 @@
 
 VERSION_MAIN = 2
 VERSION_SUB  = 2
-VERSION_VAR  = 0
+VERSION_VAR  = 1
 
+# 2.2.1 細かいバグの修正
 # 2.2.0 ビルドライブラリの更新
 # 2.1.5 親機の出力形式にカンマ区切りを追加
 # 2.1.4 SHT3x/SHTC3の対応

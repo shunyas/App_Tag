@@ -161,7 +161,6 @@ PUBLIC int16 i16SHTC3readResult(int16 *pi16Temp, int16 *pi16Humid)
 {
 	bool_t bOk = TRUE;
     int32 i32result;
-    uint16 u16result;
     uint8 au8data[6];
 
     bOk &= bSMBusSequentialRead(SHTC3_ADDRESS, 6, au8data);
@@ -178,11 +177,11 @@ vfPrintf(&sDebugStream, "\n\rSHT_DT %x %x %x", au8data[0], au8data[1], au8data[2
 	if (au8data[5] != u8crc) return SHTC3_DATA_ERROR;
 
     i32result = au8data[1] | (au8data[0] << 8);
-	if(pi16Temp) *pi16Temp = (int16)( (-45.0+175.0*i32result/65536.0)*100.0 );
+	if(pi16Temp) *pi16Temp = (int16)(-4500 + ((17500*i32result)>>16 ));
 	else return SHTC3_DATA_ERROR;
 
-    u16result = au8data[4] | (au8data[3] << 8);
-	if(pi16Humid) *pi16Humid = (int16)( (u16result/65536.0)*10000.0 );
+    i32result = au8data[4] | (au8data[3] << 8);
+	if(pi16Humid) *pi16Humid = (int16)( (i32result*10000)>>16 );
 	else return SHTC3_DATA_ERROR;
 
 #ifdef SERIAL_DEBUG
