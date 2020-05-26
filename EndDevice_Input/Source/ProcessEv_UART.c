@@ -120,6 +120,12 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 		sSerCmdOut.vOutput(&sSerCmdOut, &sSerStream);
 	} else
+#if 0
+	if (!bPortRead(DIO_BUTTON)) {
+		// DIO_BUTTON が Hi に戻ったらスリープに戻す
+		ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP);
+	} else
+#endif
 	if (eEvent == E_ORDER_KICK) {
 		// UARTのコマンドが入力されるまで待って、送信
 		tsSerCmd_Context *pCmd = NULL;

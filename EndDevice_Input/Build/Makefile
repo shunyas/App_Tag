@@ -52,6 +52,9 @@ APPSRC += adc.c
 APPSRC += SMBus.c
 APPSRC += BH1715.c
 APPSRC += SHT21.c
+APPSRC += ADT7410.c
+APPSRC += MPL115A2.c
+APPSRC += LIS3DH.c
 APPSRC += sensor_driver.c
 
 APPSRC += Interactive.c
@@ -68,6 +71,9 @@ APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
 APPSRC += ProcessEv_SHT21.c
+APPSRC += ProcessEv_ADT7410.c
+APPSRC += ProcessEv_MPL115A2.c
+APPSRC += ProcessEv_LIS3DH.c
 APPSRC += ProcessEv_UART.c
 
 ### Target type

@@ -72,6 +72,6 @@ typedef struct {
 	bool_t bFlashLoaded; //!< フラッシュにデータが合った場合は TRUE
 } tsAppData_Ed;
 
-extern tsAppData_Ed sAppData;
+extern tsAppData_Ed sAppData_Ed;
 
 #endif /* APPDATA_H_ */

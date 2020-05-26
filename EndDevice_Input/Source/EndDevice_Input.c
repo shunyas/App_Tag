@@ -142,21 +142,15 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 				FALSE,
 				FALSE);
 
-		// リセットICの無効化
+		// リセットICの無効化(イの一番に処理)
 		vPortSetLo(DIO_VOLTAGE_CHECKER);
 		vPortAsOutput(DIO_VOLTAGE_CHECKER);
 		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
 
-		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用
+		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
 		vPortSetHi(DIO_SUPERCAP_CONTROL);
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
-
-		//	入力ボタンのプルアップを停止する
-		if ((sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER)	// ドアタイマー
-			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
-			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
-		}
 
 		// アプリケーション保持構造体の初期化
 		memset(&sAppData, 0x00, sizeof(sAppData));
@@ -167,6 +161,12 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		// フラッシュメモリからの読み出し
 		//   フラッシュからの読み込みが失敗した場合、ID=15 で設定する
 		sAppData.bFlashLoaded = Config_bLoad(&sAppData.sFlash);
+
+		//	入力ボタンのプルアップを停止する
+		if ((sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER)	// ドアタイマー
+			|| (sAppData.sFlash.sData.u8mode == PKT_ID_BOTTON && sAppData.sFlash.sData.i16param == 1 ) ) {	// 押しボタンの立ち上がり検出時
+			vPortDisablePullup(DIO_BUTTON); // 外部プルアップのため
+		}
 
 		// センサー用の制御 (Lo:Active), OPTION による制御を行っているのでフラッシュ読み込み後の制御が必要
 		vPortSetSns(TRUE);
@@ -259,6 +259,48 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppSHT21();
 		} else
+		// ADT7410
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADT7410 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppADT7410();
+		} else
+		// MPL115A2
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_MPL115A2 ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppMPL115A2();
+		} else
+		// LIS3DH
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH ) {
+			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
+			sToCoNet_AppContext.u8MacInitPending = TRUE; // 起動時の MAC 初期化を省略する(送信する時に初期化する)
+
+			// ADC の初期化
+			vInitADC();
+
+			// Other Hardware
+			vInitHardware(FALSE);
+
+			// イベント処理の初期化
+			vInitAppLIS3DH();
+		} else
 		//	LM61等のアナログセンサ用
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
 			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
@@ -340,6 +382,21 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		} else
 		// SHT21
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// ADT7410
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADT7410 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// MPL115A2
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_MPL115A2 ) {
+			// ADC の初期化
+			vInitADC();
+		} else
+		// LIS3DH
+		if ( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH ) {
 			// ADC の初期化
 			vInitADC();
 		} else
@@ -490,6 +547,12 @@ static void vInitHardware(int f_warm_start) {
 	// 入力ポートを明示的に指定する
 	vPortAsInput(DIO_BUTTON);
 
+	if( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH &&
+			sAppData.sFlash.sData.i16param == 1
+	){
+		vPortAsInput(PORT_INPUT2);
+	}
+
 	// Serial Port の初期化
 	vSerialInit();
 
@@ -527,7 +590,10 @@ static void vInitHardware(int f_warm_start) {
 	// SMBUS の初期化
 
 //	if (IS_APPCONF_OPT_SHT21()) {
-	if ( sAppData.sFlash.sData.u8mode ==  PKT_ID_SHT21 ) {
+	if ( sAppData.sFlash.sData.u8mode ==  PKT_ID_SHT21 ||
+		 sAppData.sFlash.sData.u8mode ==  PKT_ID_ADT7410 ||
+		 sAppData.sFlash.sData.u8mode ==  PKT_ID_LIS3DH ||
+		 sAppData.sFlash.sData.u8mode ==  PKT_ID_MPL115A2	) {
 		vSMBusInit();
 	}
 }

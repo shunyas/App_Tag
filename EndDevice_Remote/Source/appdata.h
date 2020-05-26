@@ -45,6 +45,6 @@ typedef struct {
 	// state
 	teLedState eLedState; //!< LED表示状態
 } tsAppData_Re;
-extern tsAppData_Re sAppData;
+extern tsAppData_Re sAppData_Re;
 
 #endif /* APPDATA_H_ */

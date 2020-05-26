@@ -36,6 +36,6 @@ typedef struct {
 
 	uint8 u8DO_State;	//	DOの状態(0:Hi, 1:Lo, それ以外:未定義)
 } tsAppData_Pa;
-extern tsAppData_Pa sAppData;
+extern tsAppData_Pa sAppData_Pa;
 
 #endif /* APPDATA_H_ */

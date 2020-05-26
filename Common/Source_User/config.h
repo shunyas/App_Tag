@@ -88,6 +88,20 @@ extern "C" {
 #define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
 
 #define PORT_INPUT_MASK ((1UL << PORT_UART0_RX) | (1UL <<  DIO_BUTTON))
+#define PORT_INPUT_MASK_ACL ((1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON))
+
+#ifdef PARENT
+# define sAppData sAppData_Pa
+#endif
+#ifdef ROUTER
+# define sAppData sAppData_Ro
+#endif
+#ifdef ENDDEVICE_INPUT
+# define sAppData sAppData_Ed
+#endif
+#ifdef ENDDEVICE_REMOTE
+# define sAppData sAppData_Re
+#endif
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/

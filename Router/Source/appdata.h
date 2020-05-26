@@ -32,6 +32,6 @@ typedef struct {
 	bool_t bFlashLoaded;
 	uint8 u8DebugLevel;
 } tsAppData_Ro;
-extern tsAppData_Ro sAppData;
+extern tsAppData_Ro sAppData_Ro;
 
 #endif /* APPDATA_H_ */

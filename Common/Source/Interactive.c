@@ -778,6 +778,9 @@ bool_t Config_bLoad(tsFlash *p) {
  */
 static void vConfig_UnSetAll(tsFlashApp *p) {
 	memset(p, 0xFF, sizeof(tsFlashApp));
+#ifdef ENDDEVICE_INPUT
+	p->i16param = INIT_VAL_i16; // signed 型についてはマイナスの最大値を設定する
+#endif
 }
 
 /** @ingroup FLASH
@@ -825,8 +828,7 @@ static void vConfig_SaveAndReset() {
 	if (sConfig_UnSaved.u8mode != 0xFF) {
 		sFlash.sData.u8mode = sConfig_UnSaved.u8mode;
 	}
-//	if (sConfig_UnSaved.i16param != 0xFFFF) {
-	if ( sConfig_UnSaved.i16param != -32768 ) {
+	if ( sConfig_UnSaved.i16param != INIT_VAL_i16) {
 		sFlash.sData.i16param = sConfig_UnSaved.i16param;
 	}
 #endif
