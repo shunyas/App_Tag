@@ -27,6 +27,8 @@
 
 #include "utils.h"
 
+#include "Interactive.h"
+
 #undef SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
 # include <serial.h>
@@ -38,9 +40,13 @@ tsFILE sSerStream;
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+#ifdef LITE2525A
+#define ADXL345_ADDRESS		(0x1D)
+#else
 #define ADXL345_ADDRESS		(0x53)
+#endif
 
-#define ADXL345_CONVTIME    (24+2) // 24ms MAX
+#define ADXL345_CONVTIME    (0)//(24+2) // 24ms MAX
 
 #define ADXL345_DATA_NOTYET	(-32768)
 #define ADXL345_DATA_ERROR	(-32767)
@@ -96,6 +102,7 @@ const uint8 ADXL345_AXIS[] = {
 PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
 PRIVATE uint8 u8IntSource( void );
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent);
+void vRead_Settings( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/
@@ -123,10 +130,14 @@ void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj) {
 }
 
 //	センサの設定を記述する関数
-bool_t bADXL345_Setting( int16 i16mode )
+bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam )
 {
 	u8modeflag = (uint8)i16mode;
+
 	uint8 com = 0x08;
+	if( i16mode == ACTIVE ){
+		com |= 0x20;
+	}
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
 
 	com = 0x0B;		//	Full Resolution Mode, +-16g
@@ -134,7 +145,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	タップを判別するための閾値
 	if( i16mode == S_TAP || i16mode == D_TAP ){
-		com = 0x32;			//	threshold of tap
+		if( sParam.u16ThresholdTap != 0 ){
+			com = (uint8)( sParam.u16ThresholdTap/625*10 );
+			if( 0x00FF < ( sParam.u16ThresholdTap/625*10 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x32;			//	threshold of tap
+		}
 	}else{
 		com = 0x00;
 	}
@@ -142,7 +160,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	タップを認識するための時間
 	if( i16mode == S_TAP || i16mode == D_TAP ){
-		com = 0x0F;
+		if( sParam.u16Duration != 0 ){
+			com = (uint8)( sParam.u16Duration/625*10 );
+			if( 0x00FF < ( sParam.u16Duration/625*10 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x0F;
+		}
 	}else{
 		com = 0x00;
 	}
@@ -150,7 +175,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	次のタップまでの時間
 	if( i16mode == S_TAP || i16mode == D_TAP ){
-		com = 0x50;
+		if( sParam.u16Latency != 0 ){
+			com = sParam.u16Latency*100/125;
+			if( 0x00FF < ( sParam.u16Latency*100/125 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x50;
+		}
 	}else{
 		com = 0x00;
 	}
@@ -158,7 +190,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	ダブルタップを認識するための時間
 	if( i16mode == D_TAP ){
-		com = 0xC8;			// Window Width
+		if( sParam.u16Window != 0 ){
+			com = sParam.u16Window*100/125;
+			if( 0x00FF < ( sParam.u16Window*100/125 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0xC8;			// Window Width
+		}
 	}else{
 		com = 0x00;
 	}
@@ -174,7 +213,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	自由落下を検知するための閾値
 	if( i16mode == FREEFALL ){
-		com = 0x07;			// threshold of freefall
+		if( sParam.u16ThresholdFreeFall != 0 ){
+			com = (uint8)sParam.u16ThresholdFreeFall/625*10;
+			if( 0x00FF < ( sParam.u16ThresholdFreeFall/625*10 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x07;			// threshold of freefall
+		}
 	}else{
 		com = 0x00;
 	}
@@ -182,7 +228,14 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	自由落下を検知するための時間
 	if( i16mode == FREEFALL ){
-		com = 0x2D;			// time of freefall
+		if( sParam.u16TimeFreeFall != 0 ){
+			com = (uint8)sParam.u16TimeFreeFall/5;
+			if( 0x00FF < ( sParam.u16TimeFreeFall/5 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x2D;			// time of freefall
+		}
 	}else{
 		com = 0x00;
 	}
@@ -190,23 +243,48 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	動いていることを判断するための閾値
 	if( i16mode == ACTIVE ){
-		com = 0x14;
+		if( sParam.u16ThresholdActive != 0 ){
+			com = (uint8)sParam.u16ThresholdActive/625*10;
+			if( 0x00FF < ( sParam.u16ThresholdActive/625*10 ) ){
+				com = 0xFF;
+			}
+		}else{
+			com = 0x20;
+		}
 	}else{
 		com = 0x00;
 	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );
 
 	//	動いていないことを判断するための閾値
-	if( i16mode == INACTIVE ){
-		com = 0x14;
+	if( i16mode == ACTIVE || i16mode == INACTIVE ){
+		if( sParam.u16ThresholdInactive != 0 ){
+			com = (uint8)sParam.u16ThresholdInactive/625*10;
+			if( 0x00FF < ( sParam.u16ThresholdInactive/625*10 ) ){
+				com = 0xFF;
+			}
+		}else if( i16mode == ACTIVE ){
+			com = 0x1F;
+		} else {
+			com = 0x14;
+		}
 	}else{
 		com = 0x00;
 	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_INACT, 1, &com );
 
-	//	動いていないことを判断するための時間
-	if( i16mode == INACTIVE ){
-		com = 0x05;
+	//	動いていないことを判断するための時間(s)
+	if( i16mode == ACTIVE || i16mode == INACTIVE ){
+		if( sParam.u16TimeInactive != 0 ){
+			com = (uint8)sParam.u16TimeInactive;
+			if( 0x00FF < sParam.u16TimeInactive ){
+				com = 0xFF;
+			}
+		} else if( i16mode == ACTIVE ){
+			com = 0x02;
+		} else if( i16mode == INACTIVE ){
+			com = 0x05;
+		}
 	}else{
 		com = 0x00;
 	}
@@ -214,7 +292,7 @@ bool_t bADXL345_Setting( int16 i16mode )
 
 	//	動いている/いないことを判断するための軸
 	if( i16mode == ACTIVE ){
-		com = 0x70;
+		com = 0x77;
 	}else if( i16mode == INACTIVE ){
 		com = 0x07;
 	}else{
@@ -222,7 +300,11 @@ bool_t bADXL345_Setting( int16 i16mode )
 	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 1, &com );
 
-	com = 0x00;
+	if( i16mode == ACTIVE ){
+		com = 0x08;		//	INACTIVEをINT2にして割り込みを無視する
+	}else{
+		com = 0x00;
+	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_MAP, 1, &com );
 
 	//	有効にする割り込みの設定
@@ -233,7 +315,7 @@ bool_t bADXL345_Setting( int16 i16mode )
 	}else if( i16mode == FREEFALL ){
 		com = 0x04;
 	}else if( i16mode == ACTIVE ){
-		com = 0x10;
+		com = 0x18;		//	INACTIVEも割り込みさせる
 	}else if( i16mode == INACTIVE ){
 		com = 0x08;
 	}else{
@@ -247,6 +329,8 @@ bool_t bADXL345_Setting( int16 i16mode )
 		com = 0x00;
 	}
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+
+//	vRead_Settings();
 
 	return bOk;
 }
@@ -326,30 +410,10 @@ PUBLIC int16 i16ADXL345readResult( uint8 u8axis )
 	i16result = (((au8data[1] << 8) | au8data[0]));
 	i16result = i16result*4/10;			//	1bitあたり4mg  10^-2まで有効
 
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_SOURCE, 0, NULL );
-	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &au8data[0] );
-
 	if (bOk == FALSE) {
 		i16result = SENSOR_TAG_DATA_ERROR;
 	}
 
-	uint8 com = 0x00;
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
-	//	有効にする割り込みの設定
-	if( u8modeflag == S_TAP ){
-		com = 0x40;
-	}else if( u8modeflag == D_TAP ){
-		com = 0x20;
-	}else if( u8modeflag == FREEFALL ){
-		com = 0x04;
-	}else if( u8modeflag == ACTIVE ){
-		com = 0x10;
-	}else if( u8modeflag == INACTIVE ){
-		com = 0x08;
-	}else{
-		com = 0x00;
-	}
-	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
 
 	return i16result;
 }
@@ -384,7 +448,7 @@ PUBLIC bool_t bNekotterreadResult( int16* ai16accel )
 		bOk &= bGetAxis( ADXL345_IDX_Z, au8data );
 		ai16result[ADXL345_IDX_Z] = (((au8data[1] << 8) | au8data[0]));
 
-		//	大きいデータと小さいデータを保存
+		//	総和と二乗和の計算
 		for( j=0; j<3; j++ ){
 			sum[j] += ai16result[j];
 			ssum[j] += ai16result[j]*ai16result[j];
@@ -406,6 +470,37 @@ PUBLIC bool_t bNekotterreadResult( int16* ai16accel )
 	//	終わり
 
     return bOk;
+}
+
+void vRead_Settings( void ){
+	uint8	u8source;
+	bool_t bOk = TRUE;
+
+	bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nPOWER_CTL = %02X", u8source );
+
+	bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nDATA_FORMAT = %02X", u8source );
+
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nTHRESH_ACT = %02X", u8source );
+
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nACT_INACT_CTL = %02X", u8source );
+
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nINIT_ENABLE = %02X", u8source );
+
+	bOk &= bSMBusWrite( ADXL345_ADDRESS, 0x30, 0, NULL );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8source );
+	A_PRINTF( "\r\nINIT_SOURCE = %02X", u8source );
+	A_PRINTF( "\r\n" );
+
 }
 
 /****************************************************************************/
@@ -529,6 +624,7 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 				pObj->ai16Result[ADXL345_IDX_X] = i16ADXL345readResult(ADXL345_IDX_X);
 				pObj->ai16Result[ADXL345_IDX_Y] = i16ADXL345readResult(ADXL345_IDX_Y);
 				pObj->ai16Result[ADXL345_IDX_Z] = i16ADXL345readResult(ADXL345_IDX_Z);
+//				vRead_Settings();
 			}else{
 				bNekotterreadResult(pObj->ai16Result);
 			}

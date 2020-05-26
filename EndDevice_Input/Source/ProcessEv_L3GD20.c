@@ -66,7 +66,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		u8sns_cmplt = 0;
 
 		// L3GD20 の初期化
-		vL3GD20_Init( &sObjL3GD20, &sSnsObj );
+		vL3GD20_Init( &sObjL3GD20, &sSnsObj, sAppData.sFlash.sData.i16param );
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
 			// 即座に完了した時はセンサーが接続されていない、通信エラー等

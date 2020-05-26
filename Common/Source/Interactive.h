@@ -128,6 +128,7 @@ enum {
 	E_APPCONF_ENC_KEY,    //!< 暗号化鍵の設定
 	E_APPCONF_SER_MODE,    //!< センサの設定
 	E_APPCONF_SER_PARAM,    //!< センサの固有のパラメータの設定
+	E_APPCONF_PARAM,    //!< センサの固有のパラメータの設定
 	E_APPCONF_TEST
 };
 

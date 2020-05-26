@@ -159,7 +159,6 @@ PUBLIC int16 i16ADT7410readResult( bool_t bMode16 )
     	//	符号判定
     	if(u16result & 0x8000 ){
     		i32result -= 8192;
-//    		i32result -= 4092;
     	}
     	temp = (float)i32result/16.0;
     }else{		//	16bitモード

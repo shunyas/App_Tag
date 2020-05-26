@@ -58,6 +58,10 @@ const uint8 L3GD20_AXIS[] = {
 		L3GD20_Z
 };
 
+#define L3GD20_RES250DPS	0x00
+#define L3GD20_RES500DPS	0x01
+#define L3GD20_RES2000DPS	0x02
+
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
@@ -75,17 +79,20 @@ PRIVATE void vProcessSnsObj_L3GD20(void *pvObj, teEvent eEvent);
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
+static uint16	u16mode;
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
 /****************************************************************************/
-void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
+void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj, int16 i16param) {
 	vSnsObj_Init(pSnsObj);
 
 	pSnsObj->pvData = (void*)pData;
 	pSnsObj->pvProcessSnsObj = (void*)vProcessSnsObj_L3GD20;
 
 	memset((void*)pData, 0, sizeof(tsObjData_L3GD20));
+
+	u16mode = (uint16)i16param;
 }
 
 void vL3GD20_Final(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
@@ -108,11 +115,6 @@ void vL3GD20_Final(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj) {
 PUBLIC bool_t bL3GD20reset()
 {
 	bool_t bOk = TRUE;
-//	uint8 command = L3GD20_SOFT_COM;
-
-//	bOk &= bSMBusWrite(L3GD20_ADDRESS, L3GD20_SOFT_RST, 1, &command );
-	// then will need to wait at least 15ms
-
 	return bOk;
 }
 
@@ -132,9 +134,6 @@ PUBLIC bool_t bL3GD20startRead()
 	bool_t bOk = TRUE;
 	uint8 u8com;
 	uint8 u8name = 0x00;
-#ifdef HR_MODE
-	uint8 u8hr = L3GD20_HR;
-#endif
 
 	//	Who am I?
 	bOk &= bSMBusWrite(L3GD20_ADDRESS, L3GD20_WHO, 0, NULL);
@@ -147,13 +146,14 @@ PUBLIC bool_t bL3GD20startRead()
 	u8com = 0x0F;	// x,y,z enable, Power on, ODR:95Hz, Cutoff:12.5Hz
 	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_CTRL_REG1, 1, &u8com );
 
-//	u8com = 0x10;	// +-500dps
-//	u8com = 0x20;	// +-2000dps
-//	bOk &= bSMBusWrite( L3GD20_ADDRESS, 0x23, 1, &u8com );
-
-#ifdef HR_MODE
-	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_SET_HR, 1, &u8hr );
-#endif
+	if( L3GD20_RES500DPS == u16mode ){
+		u8com = 0x10;	// +-500dps
+	}else if( L3GD20_RES2000DPS == u16mode ){
+		u8com = 0x20;	// +-2000dps
+	} else {
+		u8com = 0x00;	// +-250dps
+	}
+	bOk &= bSMBusWrite( L3GD20_ADDRESS, 0x23, 1, &u8com );
 
 	return bOk;
 }
@@ -195,9 +195,14 @@ PUBLIC int16 i16L3GD20readResult( uint8 u8axis )
 		default:
 			bOk = FALSE;
 	}
-	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.00875;		//	+-250dps( Degree per Second )
-//	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.0175;		//	+-500dps
-//	i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.07;			//	+-2000dps
+
+	if( L3GD20_RES500DPS == u16mode ){
+		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.0175;		//	+-500dps
+	}else if( L3GD20_RES2000DPS == u16mode ){
+		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.07;			//	+-2000dps
+	} else {
+		i16result = ((int16)((au8data[1] << 8) | au8data[0]))*0.00875;		//	+-250dps( Degree per Second )
+	}
 
 	if (bOk == FALSE) {
 		i16result = SENSOR_TAG_DATA_ERROR;
@@ -217,12 +222,11 @@ PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
 	uint8 i;
 	bool_t bOk = TRUE;
 
+	//	なぜか2バイトずつ読めない
 	for( i=0; i<2; i++ ){
 		bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_AXIS[u8axis]+i, 0, NULL );
 		bOk &= bSMBusSequentialRead( L3GD20_ADDRESS, 1, &au8data[i] );
 	}
-//	bOk &= bSMBusWrite( L3GD20_ADDRESS, L3GD20_AXIS[u8axis], 0, NULL );
-//	bOk &= bSMBusSequentialRead( L3GD20_ADDRESS, 2, au8data );
 
 	return bOk;
 }

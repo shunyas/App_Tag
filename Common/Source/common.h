@@ -82,13 +82,16 @@ extern const uint8 au8EncKey[];
 #define PORT_OUT2 19
 #define PORT_OUT3 4
 #define PORT_OUT4 9
+
 #define PORT_INPUT1 12
 #define PORT_INPUT2 13
 #define PORT_INPUT3 11
 #define PORT_INPUT4 16
+
 #define PORT_CONF1 10
 #define PORT_CONF2 2
 #define PORT_CONF3 3
+
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
 #endif	//	USE_TOCOSTICK
@@ -121,5 +124,4 @@ extern const uint8 au8EncKey[];
 #define PORT_UART0_RX 7
 #endif
 #endif
-
 #endif /* COMMON_H_ */

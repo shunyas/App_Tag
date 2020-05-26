@@ -70,7 +70,7 @@ APPSRC += sercmd_plus3.c
 APPSRC += sercmd_binary.c
 
 APPSRC += ProcessEv_Standard.c
-APPSRC += ProcessEv_Botton.c
+APPSRC += ProcessEv_Button.c
 APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_Door_Timer.c
 APPSRC += ProcessEv_Door_Timer_Nwk.c
@@ -117,6 +117,12 @@ ifeq ($(BOARD),TWX0003)
   CFLAGS += -DTWX0003
   OBJDIR_SUFF += _TWX0003
   TARGET_SUFF += _TWX0003
+else
+ifeq ($(BOARD),LITE2525A)
+  CFLAGS += -DLITE2525A
+  OBJDIR_SUFF += _LITE2525A
+  TARGET_SUFF += _LITE2525A
+endif
 endif
 
 ### Build Options

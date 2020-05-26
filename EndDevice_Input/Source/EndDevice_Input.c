@@ -147,18 +147,26 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 				FALSE);
 
 		// リセットICの無効化(イの一番に処理)
+#ifdef LITE2525A
+		vPortAsInput(DIO_VOLTAGE_CHECKER);
+#else
 		vPortSetLo(DIO_VOLTAGE_CHECKER);
 		vPortAsOutput(DIO_VOLTAGE_CHECKER);
 		vPortDisablePullup(DIO_VOLTAGE_CHECKER);
+#endif
 
 		// １次キャパシタ(e.g. 220uF)とスーパーキャパシタ (1F) の直結制御用(イの一番に処理)
 #ifdef TWX0003
 		// このポートは入力扱いとして何も設定しない
 		vPortAsInput(DIO_SUPERCAP_CONTROL);
 #else
+#ifdef LITE2525A
+		vPortAsInput(DIO_SUPERCAP_CONTROL);
+#else
 		vPortSetHi(DIO_SUPERCAP_CONTROL);
 		vPortAsOutput(DIO_SUPERCAP_CONTROL);
 		vPortDisablePullup(DIO_SUPERCAP_CONTROL);
+#endif
 #endif
 
 		// アプリケーション保持構造体の初期化
@@ -230,7 +238,7 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			vInitADC();
 
 			// イベント処理の初期化
-			vInitAppBotton();
+			vInitAppButton();
 		} else
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
 			sToCoNet_AppContext.bSkipBootCalib = TRUE; // 起動時のキャリブレーションを省略する(保存した値を確認)
@@ -339,7 +347,6 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 			// イベント処理の初期化
 			vInitAppL3GD20();
 		} else
-
 		// ADXL345
 		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ) {
 			sToCoNet_AppContext.bSkipBootCalib = FALSE; // 起動時のキャリブレーションを行う
@@ -440,59 +447,10 @@ void cbAppWarmStart(bool_t bAfterAhiInit) {
 		ToCoNet_vDebugInit(&sSerStream);
 		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
-		// センサ特有の初期化
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_UART ) {
-		} else
-		//	磁気スイッチなど
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_IO_TIMER ) {
-		} else
-		// SHT21
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_SHT21 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// S11059-02
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_S1105902 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// ADT7410
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADT7410 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// MPL115A2
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_MPL115A2 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// LIS3DH
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_LIS3DH ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// L3GD20
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_L3GD20 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// ADXL345
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		// TSL2561
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_TSL2561 ) {
-			// ADC の初期化
-			vInitADC();
-		} else
-		//	LM61等のアナログセンサ用
-		if ( sAppData.sFlash.sData.u8mode == PKT_ID_STANDARD	// アナログセンサ
-			|| sAppData.sFlash.sData.u8mode == PKT_ID_LM61) {	// LM61
+		//	センサ特有の初期化
+		//	リードスイッチとUART用でない限りADCを初期化
+		if( sAppData.sFlash.sData.u8mode != PKT_ID_UART &&
+			sAppData.sFlash.sData.u8mode != PKT_ID_IO_TIMER ){
 			// ADC の初期化
 			vInitADC();
 		}
@@ -636,17 +594,18 @@ static void vInitPulseCounter() {
  * @param f_warm_start TRUE:スリープ起床時
  */
 static void vInitHardware(int f_warm_start) {
+#ifndef TWX0003
 	// 入力ポートを明示的に指定する
 	if( sAppData.sFlash.sData.u8mode == PKT_ID_BUTTON ){
 		vPortAsInput(DIO_BUTTON);
 		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
 	}else if( sAppData.sFlash.sData.u8mode == PKT_ID_ADXL345 ){
-		vPortAsInput(PORT_INPUT2);
 		vPortAsInput(PORT_INPUT3);
 		vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
 	}
+#endif
 
 	// Serial Port の初期化
 	vSerialInit();
@@ -724,6 +683,7 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
  *
  * @param bActive ACTIVE時がTRUE
  */
+#ifndef TWX0003
 void vPortSetSns(bool_t bActive) {
 	if (IS_APPCONF_OPT_INVERSE_SNS_ACTIVE()) {
 		bActive = !bActive;
@@ -731,6 +691,7 @@ void vPortSetSns(bool_t bActive) {
 
 	vPortSet_TrueAsLo(DIO_SNS_POWER, bActive);
 }
+#endif
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/

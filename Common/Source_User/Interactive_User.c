@@ -40,18 +40,26 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 #ifdef ENDDEVICE_INPUT
 	p->u16RcClock = 10000;
 	p->u32Slp = DEFAULT_SLEEP_DUR_ms;
+
+#ifdef LITE2525A
+	p->u8wait = 0;
+#else
 	p->u8wait = 30;
-	p->u8mode = DEFAULT_SENSOR;
-	p->i16param = 0;
 #endif
 
-p->u32Opt = E_APPCONF_OPT_TO_ROUTER; // デフォルトの設定ビット
+	p->u8mode = DEFAULT_SENSOR;
+	p->i16param = 0;
+	p->bFlagParam = TRUE;
+	memset( &p->sADXL345Param, 0x00, sizeof(tsADXL345Param));
+#endif
+
+	p->u32Opt = E_APPCONF_OPT_TO_ROUTER; // デフォルトの設定ビット
 #ifdef TWX0003P
 	p->u32Opt = p->u32Opt | 0x20; // SimpleTagにする
 #endif
 
 #ifdef ROUTER
-	p->u8layer = 0;
+	p->u8layer = 1;
 #endif
 
 	p->u32EncKey = DEFAULT_ENC_KEY;

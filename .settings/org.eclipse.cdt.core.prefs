@@ -19,6 +19,11 @@ environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.1830
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.1830880958/PATH/value=${workspace_loc}/../Tools/ba-elf-ba2/bin${PathDelimiter}${workspace_loc}/../Tools/cygwin/bin${PathDelimiter}${workspace_loc}/../bin
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.1830880958/append=true
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.1830880958/appendContributed=false
+environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.71596915/PATH/delimiter=;
+environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.71596915/PATH/operation=replace
+environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.71596915/PATH/value=${workspace_loc}/../Tools/ba-elf-ba2/bin${PathDelimiter}${workspace_loc}/../Tools/cygwin/bin${PathDelimiter}${workspace_loc}/../bin
+environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.71596915/append=true
+environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.71596915/appendContributed=false
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.810649634.1804236715/PATH/delimiter=;
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.810649634.1804236715/PATH/operation=replace
 environment/project/cdt.managedbuild.config.gnu.cross.exe.release.802548635.810649634.1804236715/PATH/value=${workspace_loc}/../Tools/ba-elf-ba2/bin${PathDelimiter}${workspace_loc}/../Tools/cygwin/bin${PathDelimiter}${workspace_loc}/../bin

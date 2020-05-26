@@ -98,6 +98,8 @@ void Interactive_vInit() {
 	memset(&sConfig_UnSaved, 0xFF, sizeof(tsFlashApp));
 #ifdef ENDDEVICE_INPUT
 	sConfig_UnSaved.i16param = INIT_VAL_i16;
+	sConfig_UnSaved.bFlagParam = FALSE;
+	memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
 #endif
 
 	INPSTR_vInit(&sSerInpStr, &sSerStream);
@@ -364,9 +366,14 @@ static void vProcessInputByte(uint8 u8Byte) {
 
 	case 'p': // センサのパラメータ
 		V_PRINTF("Input Sensor Parameter(-32767 - 32767): ");
-//		V_PRINTF("Input Sensor Parameter\r\n( 0:NORMAL, 1:SINGLE TAP, 2:DOUBLE TAP, 3:FREE FALL, 4:NEKOTTER  ): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 6,
 				E_APPCONF_SER_PARAM);
+		break;
+
+	case 'P': // センサのパラメータ
+		V_PRINTF("Input Sensor Parameter : ");
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 64,
+				E_APPCONF_PARAM);
 		break;
 #endif
 
@@ -643,11 +650,108 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 
 	case E_APPCONF_SER_PARAM:
 		_C {
-//			int val = u32string2dec(pu8str, u8idx);
 			int32 val = atoi((char*)pu8str);
 			V_PRINTF(LB"-> ");
 			sConfig_UnSaved.i16param = val;
 			V_PRINTF("%d"LB, val);
+		}
+		break;
+
+	case E_APPCONF_PARAM:
+		_C {
+			uint8	i = 0, j = 0;
+			uint8*	str = NULL;
+			uint8*	param[4] = { NULL, NULL, NULL, NULL };
+			char*	var = NULL;
+			uint8*	number = NULL;
+			char	delims[] = ",";
+			char	eq[] = "=";
+			uint32 u32val = 0;
+
+			//	変更したかどうかのフラグ更新
+			sConfig_UnSaved.bFlagParam = TRUE;
+			//	構造体の初期化
+			memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
+
+			//	カンマ区切りの分割
+			str = (uint8*)strtok( (char*)pu8str, delims );
+			while( str != NULL || i < 4 ){
+				param[i] = str;
+				i++;
+				str = (uint8*)strtok( NULL, delims );
+			}
+
+			V_PRINTF(LB"-> ");
+			//	パラメタの解釈
+			while( j < i ){
+				var = strtok( (char*)param[j], eq );
+				//	文字がなければエラー
+				if( var == NULL ){
+					if( j==0)
+						V_PRINTF("(ignored)"LB);
+					break;
+				}
+				number = (uint8*)strtok( NULL, eq );
+				//	数字がなければエラー
+				if( number == NULL ){
+					if( j==0)
+						V_PRINTF("(ignored)"LB);
+					break;
+				}
+				if( j != 0 ){
+					V_PRINTF(", ");
+				}
+
+				if( strcmp( var, "tht" ) == 0 || strcmp( var, "THT" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdTap = (uint16)u32val;
+					V_PRINTF("THT=%d", u32val );
+				}else
+				if( strcmp( var, "dur" ) == 0 || strcmp( var, "DUR" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16Duration = (uint16)u32val;
+					V_PRINTF("DUR=%d", u32val );
+				}else
+				if( strcmp( var, "lat" ) == 0 || strcmp( var, "LAT" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16Latency = (uint16)u32val;
+					V_PRINTF("LAT=%d", u32val );
+				}else
+				if( strcmp( var, "win" ) == 0 || strcmp( var, "WIN" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16Window = (uint16)u32val;
+					V_PRINTF("WIN=%d", u32val );
+				}else
+				if( strcmp( var, "thf" ) == 0 || strcmp( var, "THF" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
+					V_PRINTF("THF=%d", u32val );
+				}else
+				if( strcmp( var, "tif" ) == 0 || strcmp( var, "TIF" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16TimeFreeFall = (uint16)u32val;
+					V_PRINTF("TIF=%d", u32val );
+				}else
+				if( strcmp( var, "tha" ) == 0 || strcmp( var, "THA" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdActive = (uint16)u32val;
+					V_PRINTF("THA=%d", u32val );
+				}else
+				if( strcmp( var, "thi" ) == 0 || strcmp( var, "THI" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
+					V_PRINTF("THI=%d", u32val );
+				}else
+				if( strcmp( var, "tii" ) == 0 || strcmp( var, "TII" ) == 0  ){
+					u32val = u32string2dec( number, strlen((char*)number) );
+					sConfig_UnSaved.sADXL345Param.u16TimeInactive = (uint16)u32val;
+					V_PRINTF("TII=%d", u32val );
+				}
+				j++;
+				if( j == i ){
+					V_PRINTF( LB );
+				}
+			}
 		}
 		break;
 #endif
@@ -833,6 +937,9 @@ static void vConfig_SaveAndReset() {
 	if ( sConfig_UnSaved.i16param != INIT_VAL_i16) {
 		sFlash.sData.i16param = sConfig_UnSaved.i16param;
 	}
+	if ( sConfig_UnSaved.bFlagParam != FALSE ) {
+		sFlash.sData.sADXL345Param = sConfig_UnSaved.sADXL345Param;
+	}
 #endif
 #ifdef ROUTER
 	if (sConfig_UnSaved.u8layer != 0xFF) {
@@ -947,9 +1054,68 @@ static void vSerUpdateScreen() {
 	} else {
 		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_MASTER_i16(param), ' ');
 	}
+	V_PRINTF(" P: set Sensor Parameter2 ( ");//THT=%d, DUR=%d, %d, %d)%c" LB,"
+	if( sConfig_UnSaved.bFlagParam ){
+		if(sConfig_UnSaved.sADXL345Param.u16ThresholdTap != 0){
+			V_PRINTF("THT=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdTap );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16Duration != 0){
+			V_PRINTF("DUR=%d ", sConfig_UnSaved.sADXL345Param.u16Duration );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16Latency != 0){
+			V_PRINTF("LAT=%d ", sConfig_UnSaved.sADXL345Param.u16Latency );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16Window != 0){
+			V_PRINTF("WIN=%d ", sConfig_UnSaved.sADXL345Param.u16Window );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall != 0){
+			V_PRINTF("THF=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16TimeFreeFall != 0){
+			V_PRINTF("TIF=%d ", sConfig_UnSaved.sADXL345Param.u16TimeFreeFall );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16ThresholdActive != 0){
+			V_PRINTF("THA=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdActive );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16ThresholdInactive != 0){
+			V_PRINTF("THI=%d ", sConfig_UnSaved.sADXL345Param.u16ThresholdInactive );
+		}
+		if(sConfig_UnSaved.sADXL345Param.u16TimeInactive != 0){
+			V_PRINTF("TII=%d ", sConfig_UnSaved.sADXL345Param.u16TimeInactive );
+		}
+	}else{
+		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap != 0){
+			V_PRINTF("THT=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16Duration != 0){
+			V_PRINTF("DUR=%d ", sAppData.sFlash.sData.sADXL345Param.u16Duration );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16Latency != 0){
+			V_PRINTF("LAT=%d ", sAppData.sFlash.sData.sADXL345Param.u16Latency );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16Window != 0){
+			V_PRINTF("WIN=%d ", sAppData.sFlash.sData.sADXL345Param.u16Window );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall != 0){
+			V_PRINTF("THF=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16TimeFreeFall != 0){
+			V_PRINTF("TIF=%d ", sAppData.sFlash.sData.sADXL345Param.u16TimeFreeFall );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive != 0){
+			V_PRINTF("THA=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive != 0){
+			V_PRINTF("THI=%d ", sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive );
+		}
+		if(sAppData.sFlash.sData.sADXL345Param.u16TimeInactive != 0){
+			V_PRINTF("TII=%d ", sAppData.sFlash.sData.sADXL345Param.u16TimeInactive );
+		}
 
+	}
+	V_PRINTF(")%c"LB,
+			sConfig_UnSaved.bFlagParam ? '*' : ' ' );
 #endif
-
 #ifdef PARENT
 	{
 		uint32 u32baud =

@@ -186,6 +186,10 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		}
 
 		if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
+#ifdef TWX0003
+			vPortSetLo(PORT_KIT_LED1);
+			vPortAsOutput(PORT_KIT_LED1);
+#endif
 			V_PRINTF(LB"TxOk");
 			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 		} else {
@@ -218,9 +222,14 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// Mininode の場合、特別な処理は無いのだが、ポーズ処理を行う
 		ToCoNet_Nwk_bPause(sAppData.pContextNwk);
 
+#ifndef TWX0003
 		// センサー用の電源制御回路を Hi に戻す
 		vPortSetSns(FALSE);
+#endif
 
+#ifdef TWX0003
+		vPortSetHi(PORT_KIT_LED1);
+#endif
 		// 周期スリープに入る
 		//  - 初回は５秒あけて、次回以降はスリープ復帰を基点に５秒
 		vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
@@ -424,5 +433,7 @@ static void vStoreSensorValue() {
 	}
 
 	// センサー用の電源制御回路を Hi に戻す
+#ifndef TWX0003
 	vPortSetSns(FALSE);
+#endif
 }

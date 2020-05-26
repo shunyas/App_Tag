@@ -51,7 +51,7 @@ typedef struct {
 /****************************************************************************/
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
-void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj );
+void vL3GD20_Init(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj, int16 i16param );
 void vL3GD20_Final(tsObjData_L3GD20 *pData, tsSnsObj *pSnsObj);
 
 PUBLIC bool_t bL3GD20reset();

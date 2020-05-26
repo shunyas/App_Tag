@@ -22,6 +22,18 @@
 
 #include <jendefs.h>
 
+typedef struct _tsADXL345Param{
+	uint16	u16ThresholdTap;
+	uint16	u16Duration;
+	uint16	u16Latency;
+	uint16	u16Window;
+	uint16	u16ThresholdFreeFall;
+	uint16	u16TimeFreeFall;
+	uint16	u16ThresholdActive;
+	uint16	u16ThresholdInactive;
+	uint16	u16TimeInactive;
+}tsADXL345Param;
+
 /** @ingroup FLASH
  * フラッシュ格納データ構造体
  */
@@ -47,6 +59,8 @@ typedef struct _tsFlashApp {
 
 	uint8 u8mode;			//!< センサの種類
 	int16 i16param;		//!< 選択したセンサ特有のパラメータ
+	bool_t bFlagParam;
+	tsADXL345Param sADXL345Param;
 } tsFlashApp;
 
 

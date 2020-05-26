@@ -339,7 +339,8 @@ static void vInitHardware(int f_warm_start) {
 	tsUartOpt sUartOpt;
 	memset(&sUartOpt, 0, sizeof(tsUartOpt));
 	uint32 u32baud = UART_BAUD;
-	if (sAppData.bFlashLoaded && bPortRead(PORT_BAUD)) {
+//	if (sAppData.bFlashLoaded && bPortRead(PORT_BAUD)) {
+	if (sAppData.bFlashLoaded && (bPortRead(PORT_BAUD) || IS_APPCONF_OPT_UART_FORCE_SETTINGS() )) {
 		u32baud = sAppData.sFlash.sData.u32baud_safe;
 		sUartOpt.bHwFlowEnabled = FALSE;
 		sUartOpt.bParityEnabled = UART_PARITY_ENABLE;
@@ -407,7 +408,8 @@ static void vSerialInit(uint32 u32Baud, tsUartOpt *pUartOpt) {
 	/* Initialise the serial port to be used for debug output */
 	sSerPort.pu8SerialRxQueueBuffer = au8SerialRxBuffer;
 	sSerPort.pu8SerialTxQueueBuffer = au8SerialTxBuffer;
-	sSerPort.u32BaudRate = UART_BAUD;
+//	sSerPort.u32BaudRate = UART_BAUD;
+	sSerPort.u32BaudRate = u32Baud;
 	sSerPort.u16AHI_UART_RTS_LOW = 0xffff;
 	sSerPort.u16AHI_UART_RTS_HIGH = 0xffff;
 	sSerPort.u16SerialRxQueueSize = sizeof(au8SerialRxBuffer);
@@ -641,13 +643,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint16	u16adc2 = G_BE_WORD();
 			uint16	u16pc1 = G_BE_WORD();(void)u16pc1;
 			uint16	u16pc2 = G_BE_WORD();(void)u16pc2;
-			int32		bias = G_BE_WORD();
-			uint8 minus = G_OCTET();
-
-			//	マイナスフラグが立ってたら符号を入れ替える。
-			if( minus == 1 ){
-				bias = -bias;
-			}
+			int16	bias = (int16)G_BE_WORD();
 
 			// LM61用の温度変換
 			//   Vo=T[℃]x10[mV]+600[mV]
@@ -803,7 +799,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16 i16z = G_BE_WORD();
 
 			// センサー情報
-			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=04%d:y=%04d:z=%04d" LB,
+			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=%04d:y=%04d:z=%04d" LB,
 					DECODE_VOLT(u8batt), u16adc1, u16adc2, i16x, i16y, i16z );
 
 #ifdef USE_LCD
@@ -1251,7 +1247,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				"%03d;"			// 連番
 				"%07x;"			// シリアル番号
 				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04x;"			//
+				"%04x;"			// モード
 				"%04d;"			//
 				"%04d;"			// adc1
 				"%04d;"			// adc2
@@ -1473,13 +1469,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16	u16adc2 = G_BE_WORD();
 		uint16	u16pc1 = G_BE_WORD(); (void)u16pc1;
 		uint16	u16pc2 = G_BE_WORD(); (void)u16pc2;
-		int	bias = G_BE_WORD();
-		uint8 minus = G_OCTET();
-
-		//	マイナスフラグが立ってたら符号を入れ替える。
-		if( minus == 1 ){
-			bias = -bias;
-		}
+		int16	bias = (int16)G_BE_WORD();
 
 		// LM61用の温度変換
 		//   Vo=T[℃]x10[mV]+600[mV]
@@ -1621,49 +1611,124 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 	case PKT_ID_LM61:
 	case PKT_ID_SHT21:
 		_C {
-			S_OCTET(G_OCTET()); // batt
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			int16	i16temp = G_BE_WORD();
+			uint16	u16humi = G_BE_WORD();
 
-			S_BE_WORD(G_BE_WORD());
-			S_BE_WORD(G_BE_WORD());
-			S_BE_WORD(G_BE_WORD());
-			S_BE_WORD(G_BE_WORD());
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(i16temp);
+			S_BE_WORD(u16humi);
 		}
 
 		if (sRxPktInfo.u8pkt == PKT_ID_LM61) {
-			S_BE_WORD(G_BE_WORD());
-			S_OCTET(G_OCTET());
+			int16	bias = G_BE_WORD();
+			S_BE_WORD( bias );
 		}
 		break;
 
 	case PKT_ID_ADT7410:
+		_C {
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			int16	i16temp = G_BE_WORD();
+
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(i16temp);
+		}
+		break;
+
 	case PKT_ID_MPL115A2:
 		_C {
-			S_OCTET(G_OCTET()); // batt
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			uint16	u16atmo = G_BE_WORD();
 
-			S_BE_WORD(G_BE_WORD());		//	ADC1
-			S_BE_WORD(G_BE_WORD());		//	ADC2
-			S_BE_WORD(G_BE_WORD());		//	Result
+			S_OCTET(u8batt);		// batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(u16atmo);		//	Result
 		}
 		break;
 
 	case PKT_ID_LIS3DH:
+	case PKT_ID_ADXL345:
+	case PKT_ID_L3GD20:
 		_C {
-			S_OCTET(G_OCTET()); // batt
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			int16	i16x = G_BE_WORD();
+			int16	i16y = G_BE_WORD();
+			int16	i16z = G_BE_WORD();
 
-			S_BE_WORD(G_BE_WORD());		//	ADC1
-			S_BE_WORD(G_BE_WORD());		//	ADC2
-			S_BE_WORD(G_BE_WORD());		//	x
-			S_BE_WORD(G_BE_WORD());		//	y
-			S_BE_WORD(G_BE_WORD());		//	z
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(i16x);		//	Result
+			S_BE_WORD(i16y);		//	Result
+			S_BE_WORD(i16z);		//	Result
+
+			if( sRxPktInfo.u8pkt == PKT_ID_ADXL345 ){
+				uint8 u8mode = G_OCTET();
+				S_OCTET(u8mode);
+			}
+		}
+		break;
+
+	case PKT_ID_TSL2561:
+		_C {
+			uint8 u8batt = G_OCTET();
+
+			uint16	u16adc1 = G_BE_WORD();
+			uint16	u16adc2 = G_BE_WORD();
+			uint32	u32lux = G_BE_DWORD();
+
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(u16adc2);
+			S_BE_DWORD(u32lux);		//	Result
+		}
+		break;
+
+	case PKT_ID_S1105902:
+		_C {
+			uint8 u8batt = G_OCTET();
+
+			uint16 u16adc1 = G_BE_WORD();
+			uint16 u16adc2 = G_BE_WORD();
+			int16 u16R = G_BE_WORD();
+			int16 u16G = G_BE_WORD();
+			int16 u16B = G_BE_WORD();
+			int16 u16I = G_BE_WORD();
+
+			S_OCTET(u8batt); // batt
+			S_BE_WORD(u16adc1);
+			S_BE_WORD(u16adc2);
+			S_BE_WORD(u16R);		//	Result
+			S_BE_WORD(u16G);		//	Result
+			S_BE_WORD(u16B);
+			S_BE_WORD(u16I);
 		}
 		break;
 
 	//	磁気スイッチ
 	case PKT_ID_IO_TIMER:
 		_C {
-			S_OCTET(G_OCTET()); // batt
-			S_OCTET(G_OCTET()); // stat
-			S_BE_DWORD(G_BE_DWORD()); // dur
+			uint8	u8batt = G_OCTET();
+			uint8	u8stat = G_OCTET();
+			uint32	u32dur = G_BE_DWORD();
+
+			S_OCTET(u8batt); // batt
+			S_OCTET(u8stat); // stat
+			S_BE_DWORD(u32dur); // dur
 		}
 		break;
 
@@ -1672,8 +1737,10 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint8 u8len = G_OCTET();
 			S_OCTET(u8len);
 
+			uint8	tmp;
 			while (u8len--) {
-				S_OCTET(G_OCTET());
+				tmp = G_OCTET();
+				S_OCTET(tmp);
 			}
 		}
 		break;
@@ -1681,11 +1748,17 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 	//	押しボタン
 	case PKT_ID_BUTTON:
 		_C {
-			S_OCTET(G_OCTET()); // batt
-			S_BE_WORD(G_BE_WORD());
-			S_BE_WORD(G_BE_WORD());
-			S_OCTET(G_OCTET());
-			S_OCTET(G_OCTET());
+			uint8	u8batt = G_OCTET();
+			uint16	u16adc0 = G_BE_WORD();
+			uint16	u16adc1 = G_BE_WORD();
+			uint8	u8mode = G_OCTET();
+			uint8	u8bitmap = G_OCTET();
+
+			S_OCTET(u8batt);		// batt
+			S_BE_WORD(u16adc0);
+			S_BE_WORD(u16adc1);
+			S_OCTET( u8mode );
+			S_OCTET( u8bitmap );
 		}
 		break;
 

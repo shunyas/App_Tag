@@ -94,7 +94,7 @@ PUBLIC bool_t bBH1715reset()
 {
 	bool_t bOk = TRUE;
 
-	bOk &= bSMBusWrite(BH1715_ADDRESS, BH1715_SOFT_RST, 0, NULL);
+//	bOk &= bSMBusWrite(BH1715_ADDRESS, BH1715_SOFT_RST, 0, NULL);
 	// then will need to wait at least 15ms
 
 	return bOk;

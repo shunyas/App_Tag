@@ -146,19 +146,11 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 		//	LM61を使う場合
 		uint16 bias=0;
-		uint8 minus=0;
 		if( sAppData.sFlash.sData.u8mode == 0x11 ){
 			bias = sAppData.sFlash.sData.i16param;
-			if( sAppData.sFlash.sData.i16param < 0 ){
-				minus = 1;
-				bias = -(sAppData.sFlash.sData.i16param);
-			}else{
-				bias = sAppData.sFlash.sData.i16param;
-			}
 
-			S_BE_WORD( bias );		//	バイアスの絶対値
-			S_OCTET( minus );		//	バイアスの符号 +:0 -:1
-			V_PRINTF(LB"%d", sAppData.sFlash.sData.i16param);
+			S_BE_WORD( bias );		//	バイアス
+			V_PRINTF(LB"%d", bias);
 		}
 
 		sTx.u8Len = q - sTx.auData; // パケットのサイズ

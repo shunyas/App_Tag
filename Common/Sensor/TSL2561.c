@@ -169,8 +169,7 @@ PUBLIC uint32 u32TSL2561readResult( void )
 		}
 		data[1] = ((au8data[1] << 8) | au8data[0]);	//	読み込んだ数値を代入
 
-		//	TSL2561FN
-//		A_PRINTF("\r\n0 = %d, 1 = %d, / = %d", data[0], data[1], (int)(((float)data[1]/(float)data[2])*10000.0));
+		//	TSL2561FN 照度の計算
 		Lux = u32CalcLux(data);
 
 		u32result = Lux;
@@ -225,7 +224,6 @@ uint32 u32CalclateLux( uint8 u8Gain, uint8 u8Intg, uint16* pu16Data )
 	// scale the channel values
 	channel0 = (pu16Data[0] * chScale) >> CH_SCALE;
 	channel1 = (pu16Data[1] * chScale) >> CH_SCALE;
-//	A_PRINTF("\r\nchannel0 = %d, channel1 = %d", channel0, channel1);
 
 	//−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
 	// find the ratio of the channel values (Channel1/Channel0)

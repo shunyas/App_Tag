@@ -1,8 +1,11 @@
 VERSION_MAIN = 1
 VERSION_SUB  = 4
-VERSION_VAR  = 0
+VERSION_VAR  = 1
 
+# 1.4.1 TWE-Lite 2525Aに対応 複数種のI2Cセンサに対応
 # 1.4.0 TWX0003用に機能限定(SHT21のみ動作する 小サイズバイナリ)
+# 1.3.8 書式モード出力で正しい値が出力されなかった
+# 1.3.7 App_UART の RTS ピンの出力が動作していなかった
 # 1.3.6 EndDevice_Remote(テスト実装)用に用意したParentからのMessagePoolの通信は、現時点では不要でありコメントアウト
 # 1.3.5 ADT7410の温度計算の修正
 # 1.3.4 LM61 の BIAS 設定の初期化が間違えている

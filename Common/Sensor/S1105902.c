@@ -161,18 +161,18 @@ PUBLIC uint16 u16S1105902readResult( uint8 u8comp )
 	uint16	u16result=0;
 	uint8	au8data[2];
 
-	//	各軸の読み込み
+	//	各成分の読み込み
 	switch( u8comp ){
-		case S1105902_IDX_R:
+		case S1105902_IDX_R:	//	赤
 			bOk &= bGetComp( S1105902_IDX_R, au8data );
 			break;
-		case S1105902_IDX_G:
+		case S1105902_IDX_G:	//	緑
 			bOk &= bGetComp( S1105902_IDX_G, au8data );
 			break;
-		case S1105902_IDX_B:
+		case S1105902_IDX_B:	//	青
 			bOk &= bGetComp( S1105902_IDX_B, au8data );
 			break;
-		case S1105902_IDX_I:
+		case S1105902_IDX_I:	//	赤外線
 			bOk &= bGetComp( S1105902_IDX_I, au8data );
 			break;
 		default:

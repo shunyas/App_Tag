@@ -91,7 +91,11 @@ typedef struct _sCbHandler {
 /**
  * ToCoStuff用 LEDのポート名
  */
+#ifdef LITE2525A
+#define LED1	5
+#else
 #define LED1	0
+#endif
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
@@ -100,7 +104,7 @@ extern void *pvProcessEv1, *pvProcessEv2;
 extern void (*pf_cbProcessSerialCmd)(tsSerCmd_Context *);
 
 void vInitAppStandard();
-void vInitAppBotton();
+void vInitAppButton();
 void vInitAppSHT21();
 void vInitAppS1105902();
 void vInitAppADT7410();

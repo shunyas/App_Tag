@@ -19,6 +19,7 @@ extern "C" {
 /****************************************************************************/
 /***        Include Files                                                 ***/
 /****************************************************************************/
+#include "appsave.h"
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
@@ -62,13 +63,14 @@ typedef struct {
 /***        Exported Functions (primitive funcs)                          ***/
 /****************************************************************************/
 void vADXL345_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
-bool_t bADXL345_Setting( int16 i16mode );
+bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam );
 void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);
 
 PUBLIC bool_t bADXL345reset();
 PUBLIC bool_t bADXL345startRead();
 PUBLIC int16 i16ADXL345readResult( uint8 u8axis );
 PUBLIC bool_t bNekotterreadResult( int16* ai16accel );
+void vRead_Settings( void );
 
 /****************************************************************************/
 /***        Exported Variables                                            ***/

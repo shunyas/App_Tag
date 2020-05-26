@@ -54,6 +54,8 @@ extern "C" {
 #define CHANNEL             15
 #ifdef TWX0003
 #define DEFAULT_SENSOR		0x31
+#elif LITE2525A
+#define DEFAULT_SENSOR		0x35
 #else
 #define DEFAULT_SENSOR		0x10
 #endif
@@ -94,9 +96,16 @@ extern "C" {
 #define DIO_SUPERCAP_CONTROL (PORT_OUT2) // DO2: SUPER CAP の電圧が上昇すると LO に設定
 #define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
 
+#ifdef LITE2525A
+#define LED (5)
+#else
+#define LED (0)
+#endif
+
 #define PORT_INPUT_MASK ( 1UL << DIO_BUTTON)
-#define PORT_INPUT_MASK_ADXL345 ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
-#define PORT_INPUT_MASK_ACL ((1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON))
+//#define PORT_INPUT_MASK_ADXL345 ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
+#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON ) | (1UL <<  PORT_INPUT3) )
+#define PORT_INPUT_MASK_ACL ( (1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON) )
 
 #ifdef PARENT
 # define sAppData sAppData_Pa

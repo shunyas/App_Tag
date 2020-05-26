@@ -48,10 +48,6 @@ enum {
  */
 PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	if (eEvent == E_EVENT_START_UP) {
-		vPortSetLo(LED1);
-		// Stuff用LED
-		vPortAsOutput(LED1);
-
 		if (u32evarg & EVARG_START_UP_WAKEUP_RAMHOLD_MASK) {
 			// Warm start message
 			V_PRINTF(LB "*** Warm starting woke by %s. ***", sAppData.bWakeupByButton ? "DIO" : "WakeTimer");
@@ -74,7 +70,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
-			bADXL345_Setting( sAppData.sFlash.sData.i16param );
+			bADXL345_Setting( sAppData.sFlash.sData.i16param, sAppData.sFlash.sData.sADXL345Param );
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
 		if (bSnsObj_isComplete(&sSnsObj)) {
@@ -188,12 +184,21 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			sTx.u8Cmd = 0; // 0..7 の値を取る。パケットの種別を分けたい時に使用する
 			//sTx.u8Retry = 0x81; // 強制２回送信
 
+			V_PRINTF( LB"INT = %02X", sObjADXL345.u8Interrupt );
+
 			if (IS_APPCONF_OPT_SECURE()) {
 				sTx.bSecurePacket = TRUE;
 			}
 
+			vPortAsOutput(LED);
 			if (ToCoNet_Nwk_bTx(sAppData.pContextNwk, &sTx)) {
+
 				V_PRINTF(LB"TxOk");
+#ifdef LITE2525A
+				vPortSetHi(LED);
+#else
+				vPortSetLo(LED);
+#endif
 				ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 			} else {
 				V_PRINTF(LB"TxFl");
@@ -228,14 +233,21 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		// センサー用の電源制御回路を Hi に戻す
 		vPortSetSns(FALSE);
 
-		vPortSetHi(LED1);
-		// Stuff用LED
-		vPortAsOutput(LED1);
-
+#ifdef LITE2525A
+		vPortSetLo(LED);
+#else
+		vPortSetHi(LED);
+#endif
 		// 周期スリープに入る
 		if(sAppData.sFlash.sData.i16param == NORMAL || sAppData.sFlash.sData.i16param == NEKOTTER ){
 			vSleep(sAppData.sFlash.sData.u32Slp, sAppData.u16frame_count == 1 ? FALSE : TRUE, FALSE);
 		}else{
+			//	割り込みの設定
+			vAHI_DioSetDirection(PORT_INPUT_MASK_ADXL345, 0); // set as input
+			(void)u32AHI_DioInterruptStatus(); // clear interrupt register
+			vAHI_DioWakeEnable(PORT_INPUT_MASK_ADXL345, 0); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge(PORT_INPUT_MASK_ADXL345, 0); // 割り込みエッジ（立上がりに設定）
+
 			vSleep(0, FALSE, FALSE);
 		}
 	}

@@ -365,7 +365,7 @@ static tsCbHandler sCbHandler = {
 /**
  * アプリケーション初期化
  */
-void vInitAppBotton() {
+void vInitAppButton() {
 	psCbHandler = &sCbHandler;
 	pvProcessEv1 = vProcessEvCore;
 }

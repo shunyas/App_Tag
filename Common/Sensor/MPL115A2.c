@@ -38,7 +38,7 @@ extern tsFILE sDebugStream;
 #define MPL115A2_CONVERT     (0x12)
 #define MPL115A2_CONVTIME    (24+2) // 24ms MAX
 
-#define PORT_OUT1 18
+//#define PORT_OUT1 18
 
 //#define TEST
 
@@ -90,18 +90,6 @@ void vMPL115A2_Final(tsObjData_MPL115A2 *pData, tsSnsObj *pSnsObj) {
 PUBLIC bool_t bMPL115reset()
 {
 	bool_t	bOk = TRUE;
-//	uint8	u8wait;
-
-	vPortAsOutput(PORT_OUT1);
-	vPortSetHi(PORT_OUT1);
-
-	// then will need to wait at least 15ms
-	//	この実装はよくない気がする
-//	u8wait = u32TickCount_ms;
-//	while(u32TickCount_ms-u8wait < 15){
-//	}
-
-	vPortSetLo(PORT_OUT1);
 	return bOk;
 }
 
@@ -120,7 +108,6 @@ PUBLIC bool_t bMPL115startRead()
 {
 	bool_t bOk = TRUE;
 
-	// start conversion (will take some ms according to bits accuracy)
 	//	変換命令
 	bOk &= bMPL115startConvert();
 
@@ -152,9 +139,6 @@ PUBLIC int16 i16MPL115readResult()
 	uint8 au8temp[4];		//	気圧・温度のバイナリデータを受け取るTemporary
 	float a0, b1, b2, c12;					//	補正値
 	uint16 u16temp, u16pascal;				//	気圧・温度のビット列
-#ifdef TEST
-	uint16 u16a0, u16b1, u16b2, u16c12;		//	補正値のビット列
-#endif
 
 	/*	気圧・気温の読み込み命令	*/
 	bOk &= bSMBusWrite(MPL115_ADDRESS, 0x00, 0, NULL);
