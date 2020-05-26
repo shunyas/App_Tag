@@ -1,8 +1,10 @@
 ##########################################################################
-#  * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - 2013 all rights reserved.
+# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT VERSION 1).
 #
-# TOCOS MAKEFILE TEMPLATE (for ToCoNet application build)
-# ToCoNet のアプリケーションを作成するための Makefile です。
+# MONOWIRELESS MAKEFILE TEMPLATE (for TWE-NET application build)
+# TWE-NET のアプリケーションを作成するための Makefile です。
 #
 # ディレクトリに格納され使用します（サンプルアプリ参照）
 #  {SDKROOT}/ToCoNet/{ApplicationRoot}/{FirmwareType}/Build/
@@ -13,8 +15,7 @@
 # チップの選択を行います。指定が無い場合は、外部指定または chipsel.mkの規
 # 定値となります。この変数はファイル名やフォルダ名の決定にも使用されます。
 #
-#TWE_CHIP_MODEL ?= JN5148
-TWE_CHIP_MODEL ?= JN5164
+#TWE_CHIP_MODEL ?= JN5164
 #
 # また TARGET_DIR 変数に .. 、PROJNAME に ../.. のディレクトリ名を格納
 # します。
@@ -75,7 +76,6 @@ APPSRC += sercmd_binary.c
 
 APPSRC += ProcessEv_Standard.c
 APPSRC += ProcessEv_Button.c
-APPSRC += ProcessEv_Swing.c
 APPSRC += ProcessEv_Config.c
 APPSRC += ProcessEv_ConfigMaster.c
 APPSRC += ProcessEv_Door_Timer.c
@@ -123,11 +123,6 @@ CFLAGS += -DENDDEVICE_INPUT
 
 BOARD ?=
 
-ifeq ($(BOARD),TWX0003)
-  CFLAGS += -DTWX0003
-  OBJDIR_SUFF += _TWX0003
-  TARGET_SUFF += _TWX0003
-endif
 ifeq ($(BOARD),LITE2525A)
   CFLAGS += -DLITE2525A
   OBJDIR_SUFF += _LITE2525A
@@ -138,10 +133,10 @@ ifeq ($(BOARD),SWING)
   OBJDIR_SUFF += _SWING
   TARGET_SUFF += _SWING
 endif
-ifeq ($(BOARD),CNFMST)
-  CFLAGS += -DCNFMST -DUSE_TOCOSTICK
-  OBJDIR_SUFF += _CNFMST
-  TARGET_SUFF += _CNFMST
+ifeq ($(BOARD),OTA)
+  CFLAGS += -DOTA -DUSE_MONOSTICK
+  OBJDIR_SUFF += _OTA
+  TARGET_SUFF += _OTA
 endif
 
 ### Build Options

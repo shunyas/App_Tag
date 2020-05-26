@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #ifndef  ADXL345_INCLUDED
 #define  ADXL345_INCLUDED
@@ -39,13 +24,10 @@ extern "C" {
 #define ADXL345_IDX_BEGIN 0
 #define ADXL345_IDX_END (ADXL345_IDX_Z+1) // should be (last idx + 1)
 
-#ifdef LITE2525A
 #define ADXL345_ADDRESS		(0x1D)
-#else
-#define ADXL345_ADDRESS		(0x53)
-#endif
 
 #define ADXL345_CONVTIME    (0)
+#define ADXL345_LOWENERGY_CONVTIME    (10) // LowEnergyの時はADC開始から10msまつ
 
 #define ADXL345_DATA_NOTYET	(-32768)
 #define ADXL345_DATA_ERROR	(-32767)
@@ -98,8 +80,9 @@ extern "C" {
 #define LOWENERGY			512
 #define FIFO				1024
 
-#define READ_FIFO 12
+#define READ_FIFO 10
 #define READ_FIFO_SHAKE 5
+#define READ_FIFO_AIR 5
 
 #define TH_ACCEL 120
 #define TH_COUNT 0
@@ -123,6 +106,7 @@ typedef struct {
 	bool_t	bBusy;			// should block going into sleep
 
 	// data
+	uint8	u8FIFOSample;
 	int16	ai16Result[3];
 	int16	ai16ResultX[16];
 	int16	ai16ResultY[16];
@@ -144,17 +128,32 @@ typedef struct {
 void vADXL345_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
 bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink );
 
+PUBLIC bool_t bGetAxis( uint8 u8axis, uint8* au8data );
 PUBLIC bool_t bADXL345reset();
 PUBLIC bool_t bADXL345startRead();
 PUBLIC int16 i16ADXL345readResult( uint8 u8axis );
 PUBLIC bool_t bNekotterreadResult( int16* ai16accel );
 PUBLIC bool_t bShakereadResult( int16* ai16accel );
 
+// LowEnergy
+PUBLIC bool_t bADXL345_LowEnergyStartRead();
+void vADXL345_LowEnergy_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
+bool_t bADXL345_LowEnergy_Setting();
+PUBLIC bool_t bADXL345_LowEnergyReadResult( int16* ai16accel );
+
 // fifo
 void vADXL345_FIFO_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
 bool_t bADXL345_FIFO_Setting();
 
 PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int16* ai16accelz );
+
+// AirVolume
+void vADXL345_AirVolume_Init(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj );
+bool_t bADXL345_AirVolume_Setting();
+bool_t bSetFIFO_Air();
+bool_t bSetActive();
+PUBLIC bool_t b16ADXL345_AirVolumeReadResult( int16* ai16accel );
+PUBLIC bool_t b16ADXL345_AirVolumeSingleReadResult( int16* ai16accel );
 
 //
 void vADXL345_Final(tsObjData_ADXL345 *pData, tsSnsObj *pSnsObj);

@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 
 #ifndef COMMON_H_
@@ -58,16 +43,15 @@ extern const uint8 au8EncKey[];
 #define PKT_ID_IO_TIMER 0x51
 #define PKT_ID_UART 0x81
 #define PKT_ID_ADXL345_LOWENERGY 0xA1
-#define PKT_ID_SWING 0xFD
 #define PKT_ID_BUTTON 0xFE
 
 /*
  * 標準ポート定義 (TWE-Lite DIP)
  */
 #if defined(JN516x)
-#if defined (USE_TOCOSTICK)
+#if defined (USE_MONOSTICK)
 // ToCoStick 用
-#warning "IO CONF IS FOR TOCOSTICK!"
+#warning "IO CONF IS FOR MONOSTICK!"
 #define PORT_OUT1 16 // DIO16/18 をスワップ
 #define PORT_OUT2 19
 #define PORT_OUT3 4
@@ -77,14 +61,7 @@ extern const uint8 au8EncKey[];
 #define PORT_INPUT2 13
 #define PORT_INPUT3 11
 #define PORT_INPUT4 18 // DIO16/18 をスワップ
-
-#define PORT_CONF1 10
-#define PORT_CONF2 2
-#define PORT_CONF3 3
-
-#define PORT_BAUD 17
-#define PORT_UART0_RX 7
-#else	//	USE_TOCOSTICK
+#else	//	USE_MONOSTICK
 #define PORT_OUT1 18
 #define PORT_OUT2 19
 #define PORT_OUT3 4
@@ -94,6 +71,7 @@ extern const uint8 au8EncKey[];
 #define PORT_INPUT2 13
 #define PORT_INPUT3 11
 #define PORT_INPUT4 16
+#endif	//	USE_MONOSTICK
 
 #define PORT_CONF1 10
 #define PORT_CONF2 2
@@ -101,35 +79,7 @@ extern const uint8 au8EncKey[];
 
 #define PORT_BAUD 17
 #define PORT_UART0_RX 7
-#endif	//	USE_TOCOSTICK
-#elif defined(JN514x)
-#ifdef TWX0003
-#warning "IO CONF IS FOR TWX-0003!"
-#define PORT_OUT1 0 // TWX-0003 のリセット制御ピン
-#define PORT_OUT2 PORT_KIT_LED2
-#define PORT_OUT3 PORT_KIT_LED1
-#define PORT_OUT4 PORT_KIT_LED4
-#define PORT_INPUT1 8 // TWX-0003 のボタン
-#define PORT_INPUT2 5
-#define PORT_INPUT3 PORT_KIT_SW2
-#define PORT_INPUT4 PORT_KIT_SW3
-#define PORT_UART0_RX 7
-#define PORT_BAUD 12
-#define PORT_CONF2 PORT_KIT_SW1
-#else
-#define PORT_OUT1 PORT_KIT_LED1
-#define PORT_OUT2 PORT_KIT_LED2
-#define PORT_OUT3 PORT_KIT_LED3
-#define PORT_OUT4 PORT_KIT_LED4
-#define PORT_INPUT1 PORT_KIT_SW2
-#define PORT_INPUT2 5
-#define PORT_INPUT3 PORT_KIT_SW3
-#define PORT_INPUT4 PORT_KIT_SW4
-#define PORT_CONF1 1
-#define PORT_CONF2 PORT_KIT_SW1
-#define PORT_CONF3 8
-#define PORT_BAUD 12
-#define PORT_UART0_RX 7
+
 #endif
-#endif
+
 #endif /* COMMON_H_ */

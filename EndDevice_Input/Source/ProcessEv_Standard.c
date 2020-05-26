@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #include <jendefs.h>
 
@@ -46,7 +31,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			if (sAppData.sFlash.sData.u8wait) {
 				if (bWaiting == FALSE) {
 					bWaiting = TRUE;
-					ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, sAppData.sFlash.sData.u8wait, FALSE, FALSE);
+					ToCoNet_vSleep( E_AHI_WAKE_TIMER_1, sAppData.sFlash.sData.u8wait, FALSE, FALSE);
 					return;
 				} else {
 					bWaiting = FALSE;
@@ -103,7 +88,7 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 			uint8* q = au8Data;
 
 			// DIO の設定
-			uint8 DI_Bitmap = sAppData.sSns.u16Adc1 > 800 ? 0x08 : (sAppData.sSns.u16Adc1 > 600 ? 0x04 : (sAppData.sSns.u16Adc1 > 400 ? 0x02 : (sAppData.sSns.u16Adc1 > 200 ? 0x01 : 0x00)));
+			uint8 DI_Bitmap = (sAppData.sSns.u16Adc1>800 ? 0x08:0x00) + (sAppData.sSns.u16Adc1 > 600 ? 0x04:0x00) + (sAppData.sSns.u16Adc1 > 400 ? 0x02:0x00) +  (sAppData.sSns.u16Adc1 > 200 ? 0x01:0x00);
 			S_OCTET(DI_Bitmap);
 			S_OCTET(0x0F);
 
@@ -351,6 +336,9 @@ static void vStoreSensorValue() {
 	sAppData.sSns.u16PC1 = 0;
 	sAppData.sSns.u16PC2 = 0;
 #endif
+
+	// センサー用の電源制御回路を Hi に戻す
+	vPortSetSns(FALSE);
 
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];

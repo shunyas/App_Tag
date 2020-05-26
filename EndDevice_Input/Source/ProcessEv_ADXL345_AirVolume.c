@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #include <jendefs.h>
 
@@ -29,7 +14,7 @@
 #include "EndDevice_Input.h"
 
 #include "sensor_driver.h"
-#include "ADXL345_AirVolume.h"
+#include "ADXL345.h"
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
@@ -235,8 +220,9 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 		vADXL345_AirVolume_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
-			V_PRINTF(LB "*** ADXL345 Setting...");
+			V_PRINTF(LB "*** ADXL345 AirVolume Setting...");
 			bFirst = FALSE;
+			bADXL345reset();
 			bADXL345_AirVolume_Setting();
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
@@ -281,11 +267,11 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 
 PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 	// 過去4回分保存(現在含めて5回分)
-	static int32 x[5] = {0,0,0,0,0};
-	static int32 y[5] = {0,0,0,0,0};
-	static int32 z[5] = {0,0,0,0,0};
+	static int16 x[5] = {0,0,0,0,0};
+	static int16 y[5] = {0,0,0,0,0};
+	static int16 z[5] = {0,0,0,0,0};
 
-	static int32 tmpx = 0, tmpy = 0;
+	static int16 tmpx = 0, tmpy = 0;
 
 	int16 deg_now = 0;
 
@@ -321,9 +307,9 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 		}
 
 		//	センサから読み込んだ加速度を代入
-		x[0] = sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_X];
-		y[0] = sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_Y];
-		z[0] = sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_Z];
+		x[0] = sObjADXL345.ai16Result[ADXL345_IDX_X];
+		y[0] = sObjADXL345.ai16Result[ADXL345_IDX_Y];
+		z[0] = sObjADXL345.ai16Result[ADXL345_IDX_Z];
 
 		int16 avex=0;
 		int16 avey=0;
@@ -512,7 +498,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 		vAHI_DioWakeEnable(PORT_INPUT_MASK_AIRVOLUME, 0); // also use as DIO WAKE SOURCE
 		vAHI_DioWakeEdge(PORT_INPUT_MASK_AIRVOLUME, 0); // 割り込みエッジ(立上がりに設定)
-		u8Read_Interrupt_Air();
+		u8Read_Interrupt();
 
 		ToCoNet_vSleep( E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE);
 	}
@@ -684,9 +670,9 @@ static void vProcessADXL345_AirVolume(teEvent eEvent) {
 		u8sns_cmplt |= E_SNS_ADXL345_CMP;
 
 		V_PRINTF(LB"!ADXL345: X : %d, Y : %d, Z : %d",
-			sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_X],
-			sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_Y],
-			sObjADXL345.ai32Result[ADXL345_AirVolume_IDX_Z]
+			sObjADXL345.ai16Result[ADXL345_IDX_X],
+			sObjADXL345.ai16Result[ADXL345_IDX_Y],
+			sObjADXL345.ai16Result[ADXL345_IDX_Z]
 		);
 
 		// 完了時の処理

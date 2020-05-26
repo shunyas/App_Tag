@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -72,9 +57,7 @@ static bool_t bInitInteractive = FALSE;
 extern void vSerInitMessage();
 extern void vProcessSerialCmd(tsSerCmd_Context *);
 
-#ifdef PARENT
 static void vSerPrintUartOpt(uint8 u8conf);
-#endif
 
 static void vProcessInputByte_Command(int16 i16Char);
 static void vProcessInputByte(uint8 u8Byte);
@@ -330,33 +313,39 @@ static void vProcessInputByte(uint8 u8Byte) {
 				E_APPCONF_CHMASK);
 		break;
 
+
+#ifdef ENDDEVICE_INPUT
 	case 'i': // set application role
 		V_PRINTF("Input Device ID (DEC:1-100): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 3, E_APPCONF_ID);
 		break;
+#endif
 
 	case 'x': // 出力の変更
-#ifdef ENDDEVICE_INPUT
 		V_PRINTF("Retry & Rf Power"
 				LB "   YZ Y=Retry(0-9:count)"
 				LB "      Z=Power(3:Max,2,1,0:Min)"
 				LB "Input: ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 2, E_APPCONF_TX_POWER);
-
-#else
-		V_PRINTF("Tx Power (0[min]-3[max]): ");
-		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 1, E_APPCONF_TX_POWER);
-#endif
 		break;
 
 #ifdef ROUTER
 	case 'l': // 出力の変更
+/*
 		V_PRINTF(   "Layer: "
 				 LB "   XXY XX=Layer(1-63)"
 				 LB "        Y=MaxSubLayer(0-2)"
 				 LB "Input :");
+*/
+		V_PRINTF("Input Layer(1-63): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_DEC, 3,
 				E_APPCONF_LAYER);
+		break;
+
+	case 'A':
+		V_PRINTF( "Access Point SID: " );
+		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_HEX, 8,
+				E_APPCONF_ADDRHIGH);
 		break;
 #endif
 
@@ -399,7 +388,6 @@ static void vProcessInputByte(uint8 u8Byte) {
 				E_APPCONF_OPT);
 		break;
 
-#ifdef PARENT
 	case 'b': // ボーレートの変更
 		V_PRINTF("Input UART baud (DEC:9600-230400): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 10, E_APPCONF_BAUD_SAFE);
@@ -409,7 +397,6 @@ static void vProcessInputByte(uint8 u8Byte) {
 		V_PRINTF("Input UART option (e.g. 8N1): ");
 		INPSTR_vStart(&sSerInpStr, E_INPUTSTRING_DATATYPE_STRING, 3, E_APPCONF_BAUD_PARITY);
 		break;
-#endif
 
 	case 'k': // オプションビットの設定
 		V_PRINTF("Input Encription Key (HEX 32bit): ");
@@ -431,7 +418,7 @@ static void vProcessInputByte(uint8 u8Byte) {
 		V_PRINTF("!INF RESET SYSTEM...");
 		vWait(1000000);
 #ifdef ENDDEVICE_INPUT
-#ifndef CNFMST
+#ifndef OTA
 		vSleep(100,FALSE,TRUE);
 #else
 		vAHI_SwReset();
@@ -597,6 +584,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 		}
 		break;
 
+#ifdef ENDDEVICE_INPUT
 	case E_APPCONF_ID:
 		_C {
 			uint32 u32val = u32string2dec(pu8str, u8idx);
@@ -609,6 +597,7 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			}
 		}
 		break;
+#endif
 
 	case E_APPCONF_TX_POWER:
 		_C {
@@ -629,19 +618,38 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 	case E_APPCONF_LAYER:
 		_C {
 			uint32 u32val = u32string2dec(pu8str, u8idx);
-			V_PRINTF(LB"-> ");
+			V_PRINTF(LB"-> ", u8idx);
 
-//			uint8 u8layer = u32val >> 4;
-//			uint8 u8subl = u32val & 0xF;
-			uint8 u8layer = u32val/10;
-			uint8 u8subl = u32val%10;
+			uint8 u8layer = 0;
+			uint8 u8subl = 0;
+			if( u8idx == 3 ){
+				u8layer = u32val/10;
+				u8subl = u32val%10;
+			}else{
+				u8layer = u32val;
+			}
 
 			if (u8layer >= 1 && u8layer <= 63 && u8subl <= 3) {
 				sConfig_UnSaved.u8layer = u8layer * 4 + u8subl;
-				V_PRINTF("%d.%d"LB, u8layer, u8subl);
+
+				V_PRINTF("%d"LB, u8layer);
+				if( u8subl ){
+					V_PRINTF(".%d", u8subl);
+				}
+				V_PRINTF(LB);
 			} else {
 				V_PRINTF("(ignored)"LB);
 			}
+		}
+		break;
+
+	case E_APPCONF_ADDRHIGH:
+		_C {
+			uint32 u32val = u32string2hex(pu8str, u8idx);
+			V_PRINTF(LB"-> ");
+
+			sConfig_UnSaved.u32AddrHigherLayer = u32val;
+			V_PRINTF( "0x%08X"LB, sConfig_UnSaved.u32AddrHigherLayer );
 		}
 		break;
 #endif
@@ -665,7 +673,6 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			if (u32val == 0) {
 
 			} else
-//			if (u32val >= 100 && u32val <= 86400000) {
 			if (u32val >= 30 && u32val <= 86400000) {
 				sConfig_UnSaved.u32Slp = u32val;
 				V_PRINTF("%d"LB, u32val);
@@ -702,116 +709,127 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			uint8*	number = NULL;
 			char	delims[] = ",";
 			char	eq[] = "=";
-			uint32 u32val = 0;
+			uint32	u32val = 0;
+			uint8	au8Temp[PARAM_MAX_LEN];
 
-			//	変更したかどうかのフラグ更新
-			sConfig_UnSaved.bFlagParam = TRUE;
-			//	構造体の初期化
-			memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
+			uint8 u8len = strlen((void*)pu8str);
 
-			//	カンマ区切りの分割
-			str = (uint8*)strtok( (char*)pu8str, delims );
-			while( str != NULL || i < 9 ){
-				param[i] = str;
-				i++;
-				str = (uint8*)strtok( NULL, delims );
-			}
+			if(u8len){
+				if( (sConfig_UnSaved.u8mode==0xFF&&sAppData.sFlash.sData.u8mode==0x35) || sConfig_UnSaved.u8mode==0x35 ){
+					memcpy(au8Temp, sConfig_UnSaved.uParam.au8Param, PARAM_MAX_LEN);	// いったん取っておく
+					memset( sConfig_UnSaved.uParam.au8Param, 0x00, PARAM_MAX_LEN );		// 空にする
 
-			V_PRINTF(LB"-> ");
-			//	パラメタの解釈
-			while( j < i ){
-				var = strtok( (char*)param[j], eq );
-				//	文字がなければエラー
-				if( var == NULL ){
-					if( j==0)
+					//	カンマ区切りの分割
+					str = (uint8*)strtok( (char*)pu8str, delims );
+					while( str != NULL || i < 9 ){
+						param[i] = str;
+						i++;
+						str = (uint8*)strtok( NULL, delims );
+					}
+
+					V_PRINTF(LB"-> ");
+					//	パラメタの解釈
+					while( j < i ){
+						var = strtok( (char*)param[j], eq );
+						//	文字がなければエラー
+						if( var == NULL ){
+							if( j==0 ){
+								V_PRINTF("(ignored)"LB);
+								memcpy(sConfig_UnSaved.uParam.au8Param, au8Temp, PARAM_MAX_LEN);	// 元に戻す
+							}
+							break;
+						}
+						number = (uint8*)strtok( NULL, eq );
+						//	数字がなければエラー
+						if( number == NULL ){
+							if( j==0 ){
+								V_PRINTF("(ignored)"LB);
+								memcpy(sConfig_UnSaved.uParam.au8Param, au8Temp, PARAM_MAX_LEN);	// 元に戻す
+							}
+							break;
+						}
+						if( j != 0 ){
+							V_PRINTF(", ");
+						}
+						//	変更したかどうかのフラグ更新
+						sConfig_UnSaved.bFlagParam = TRUE;
+						if( strcmp( var, "tht" ) == 0 || strcmp( var, "THT" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdTap = (uint16)u32val;
+							V_PRINTF("THT=%d", u32val );
+						}else if( strcmp( var, "dur" ) == 0 || strcmp( var, "DUR" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16Duration = (uint16)u32val;
+							V_PRINTF("DUR=%d", u32val );
+						}else if( strcmp( var, "lat" ) == 0 || strcmp( var, "LAT" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16Latency = (uint16)u32val;
+							V_PRINTF("LAT=%d", u32val );
+						}else if( strcmp( var, "win" ) == 0 || strcmp( var, "WIN" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16Window = (uint16)u32val;
+							V_PRINTF("WIN=%d", u32val );
+						}else if( strcmp( var, "thf" ) == 0 || strcmp( var, "THF" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
+							V_PRINTF("THF=%d", u32val );
+						}else if( strcmp( var, "tif" ) == 0 || strcmp( var, "TIF" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16TimeFreeFall = (uint16)u32val;
+							V_PRINTF("TIF=%d", u32val );
+						}else if( strcmp( var, "tha" ) == 0 || strcmp( var, "THA" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdActive = (uint16)u32val;
+							V_PRINTF("THA=%d", u32val );
+						}else if( strcmp( var, "thi" ) == 0 || strcmp( var, "THI" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
+							V_PRINTF("THI=%d", u32val );
+						}else if( strcmp( var, "tii" ) == 0 || strcmp( var, "TII" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16TimeInactive = (uint16)u32val;
+							V_PRINTF("TII=%d", u32val );
+						}else if( strcmp( var, "fif" ) == 0 || strcmp( var, "FIF" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16Duration = (uint16)u32val;
+							V_PRINTF("FIF=%d", u32val );
+						}else if( strcmp( var, "th1" ) == 0 || strcmp( var, "TH1" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdTap = (uint16)u32val;
+							V_PRINTF("TH1=%d", u32val );
+						}else if( strcmp( var, "th2" ) == 0 || strcmp( var, "TH2" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
+							V_PRINTF("TH2=%d", u32val );
+						}else if( strcmp( var, "th3" ) == 0 || strcmp( var, "TH3" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdActive = (uint16)u32val;
+							V_PRINTF("TH3=%d", u32val );
+						}else if( strcmp( var, "th4" ) == 0 || strcmp( var, "TH4" ) == 0  ){
+							u32val = u32string2dec( number, strlen((char*)number) );
+							sConfig_UnSaved.uParam.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
+							V_PRINTF("TH4=%d", u32val );
+						}
+						j++;
+						if( j == i ){
+							V_PRINTF( LB );
+						}
+					}
+				}else{
+					if( u8len >= PARAM_MAX_LEN ){
 						V_PRINTF("(ignored)"LB);
-					break;
+					}else{
+						//	変更したかどうかのフラグ更新
+						sConfig_UnSaved.bFlagParam = TRUE;
+						//	構造体の初期化
+						memset( sConfig_UnSaved.uParam.au8Param, 0x00, PARAM_MAX_LEN );
+						memcpy( sConfig_UnSaved.uParam.au8Param, pu8str, PARAM_MAX_LEN );
+						V_PRINTF(LB"-> ");
+						V_PRINTF( "%s"LB, sConfig_UnSaved.uParam.au8Param );
+					}
 				}
-				number = (uint8*)strtok( NULL, eq );
-				//	数字がなければエラー
-				if( number == NULL ){
-					if( j==0)
-						V_PRINTF("(ignored)"LB);
-					break;
-				}
-				if( j != 0 ){
-					V_PRINTF(", ");
-				}
-
-				if( strcmp( var, "tht" ) == 0 || strcmp( var, "THT" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdTap = (uint16)u32val;
-					V_PRINTF("THT=%d", u32val );
-				}else
-				if( strcmp( var, "dur" ) == 0 || strcmp( var, "DUR" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16Duration = (uint16)u32val;
-					V_PRINTF("DUR=%d", u32val );
-				}else
-				if( strcmp( var, "lat" ) == 0 || strcmp( var, "LAT" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16Latency = (uint16)u32val;
-					V_PRINTF("LAT=%d", u32val );
-				}else
-				if( strcmp( var, "win" ) == 0 || strcmp( var, "WIN" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16Window = (uint16)u32val;
-					V_PRINTF("WIN=%d", u32val );
-				}else
-				if( strcmp( var, "thf" ) == 0 || strcmp( var, "THF" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
-					V_PRINTF("THF=%d", u32val );
-				}else
-				if( strcmp( var, "tif" ) == 0 || strcmp( var, "TIF" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16TimeFreeFall = (uint16)u32val;
-					V_PRINTF("TIF=%d", u32val );
-				}else
-				if( strcmp( var, "tha" ) == 0 || strcmp( var, "THA" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdActive = (uint16)u32val;
-					V_PRINTF("THA=%d", u32val );
-				}else
-				if( strcmp( var, "thi" ) == 0 || strcmp( var, "THI" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
-					V_PRINTF("THI=%d", u32val );
-				}else
-				if( strcmp( var, "tii" ) == 0 || strcmp( var, "TII" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16TimeInactive = (uint16)u32val;
-					V_PRINTF("TII=%d", u32val );
-				}else
-				if( strcmp( var, "fif" ) == 0 || strcmp( var, "FIF" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16Duration = (uint16)u32val;
-					V_PRINTF("FIF=%d", u32val );
-				}else
-				if( strcmp( var, "th1" ) == 0 || strcmp( var, "TH1" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdTap = (uint16)u32val;
-					V_PRINTF("TH1=%d", u32val );
-				}else
-				if( strcmp( var, "th2" ) == 0 || strcmp( var, "TH2" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdFreeFall = (uint16)u32val;
-					V_PRINTF("TH2=%d", u32val );
-				}else
-				if( strcmp( var, "th3" ) == 0 || strcmp( var, "TH3" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdActive = (uint16)u32val;
-					V_PRINTF("TH3=%d", u32val );
-				}else
-				if( strcmp( var, "th4" ) == 0 || strcmp( var, "TH4" ) == 0  ){
-					u32val = u32string2dec( number, strlen((char*)number) );
-					sConfig_UnSaved.sADXL345Param.u16ThresholdInactive = (uint16)u32val;
-					V_PRINTF("TH4=%d", u32val );
-				}
-				j++;
-				if( j == i ){
-					V_PRINTF( LB );
-				}
+			}else{
+				V_PRINTF("(ignored)"LB);
 			}
 		}
 		break;
@@ -839,7 +857,6 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 		}
 		break;
 
-#ifdef PARENT
 	case E_APPCONF_BAUD_SAFE:
 		_C {
 			uint32 u32val = 0;
@@ -903,7 +920,6 @@ static void vProcessInputString(tsInpStr_Context *pContext) {
 			}
 		}
 		break;
-#endif
 
 	default:
 		break;
@@ -948,7 +964,7 @@ static void vConfig_UnSetAll(tsFlashApp *p) {
 #ifdef ENDDEVICE_INPUT
 	sConfig_UnSaved.i16param = INIT_VAL_i16;
 	sConfig_UnSaved.bFlagParam = FALSE;
-	memset( &sConfig_UnSaved.sADXL345Param, 0x0000, sizeof(tsADXL345Param) );
+	memset( sConfig_UnSaved.uParam.au8Param, 0x00, PARAM_MAX_LEN );
 	p->i16param = INIT_VAL_i16; // signed 型についてはマイナスの最大値を設定する
 #endif
 }
@@ -1029,23 +1045,23 @@ static void vConfig_Update(tsFlashApp *pTemp) {
 	if (sConfig_UnSaved.u32chmask != 0xFFFFFFFF) {
 		pTemp->u32chmask = sConfig_UnSaved.u32chmask;
 	}
+#ifdef ENDDEVICE_INPUT
 	if (sConfig_UnSaved.u8id != 0xFF) {
 		pTemp->u8id = sConfig_UnSaved.u8id;
 	}
+#endif
 	if (sConfig_UnSaved.u8ch != 0xFF) {
 		pTemp->u8ch = sConfig_UnSaved.u8ch;
 	}
 	if (sConfig_UnSaved.u8pow != 0xFF) {
 		pTemp->u8pow = sConfig_UnSaved.u8pow;
 	}
-#ifdef PARENT
 	if (sConfig_UnSaved.u32baud_safe != 0xFFFFFFFF) {
 		pTemp->u32baud_safe = sConfig_UnSaved.u32baud_safe;
 	}
 	if (sConfig_UnSaved.u8parity != 0xFF) {
 		pTemp->u8parity = sConfig_UnSaved.u8parity;
 	}
-#endif
 	if (sConfig_UnSaved.u32Opt != 0xFFFFFFFF) {
 		pTemp->u32Opt = sConfig_UnSaved.u32Opt;
 	}
@@ -1066,12 +1082,15 @@ static void vConfig_Update(tsFlashApp *pTemp) {
 		pTemp->i16param = sConfig_UnSaved.i16param;
 	}
 	if ( sConfig_UnSaved.bFlagParam != FALSE ) {
-		pTemp->sADXL345Param = sConfig_UnSaved.sADXL345Param;
+		memcpy(pTemp->uParam.au8Param, sConfig_UnSaved.uParam.au8Param, PARAM_MAX_LEN);
 	}
 #endif
 #ifdef ROUTER
 	if (sConfig_UnSaved.u8layer != 0xFF) {
 		pTemp->u8layer = sConfig_UnSaved.u8layer;
+	}
+	if (sConfig_UnSaved.u32AddrHigherLayer != 0xFFFFFFFF) {
+		pTemp->u32AddrHigherLayer = sConfig_UnSaved.u32AddrHigherLayer;
 	}
 #endif
 }
@@ -1124,6 +1143,7 @@ static void vSerUpdateScreen() {
 			FL_IS_MODIFIED_u32(appid) ? FL_UNSAVE_u32(appid) : FL_MASTER_u32(appid),
 			FL_IS_MODIFIED_u32(appid) ? '*' : ' ');
 
+#ifdef ENDDEVICE_INPUT
 	// Device ID
 	{
 		uint8 u8DevID =
@@ -1137,6 +1157,7 @@ static void vSerUpdateScreen() {
 					FL_IS_MODIFIED_u8(id) ? '*' : ' ');
 		}
 	}
+#endif
 
 	V_PRINTF(" c: set Channels (");
 	{
@@ -1167,71 +1188,6 @@ static void vSerUpdateScreen() {
 			FL_IS_MODIFIED_u8(pow) ? FL_UNSAVE_u8(pow) : FL_MASTER_u8(pow),
 			FL_IS_MODIFIED_u8(pow) ? '*' : ' ');
 
-#ifdef ROUTER
-	{
-		uint8 c = FL_IS_MODIFIED_u8(layer) ? FL_UNSAVE_u8(layer) : FL_MASTER_u8(layer);
-		V_PRINTF(" l: set layer (%d.%d)%c" LB,
-			c / 4, c % 4,
-			FL_IS_MODIFIED_u8(layer) ? '*' : ' ');
-	}
-#endif
-
-#ifdef ENDDEVICE_INPUT
-	V_PRINTF(" d: set Sleep Dur (%d)%c" LB,
-			FL_IS_MODIFIED_u32(Slp) ? FL_UNSAVE_u32(Slp) : FL_MASTER_u32(Slp),
-			FL_IS_MODIFIED_u32(Slp) ? '*' : ' ');
-
-	V_PRINTF(" w: set Sensor Wait Dur (%d)%c" LB,
-			FL_IS_MODIFIED_u8(wait) ? FL_UNSAVE_u8(wait) : FL_MASTER_u8(wait),
-			FL_IS_MODIFIED_u8(wait) ? '*' : ' ');
-
-	V_PRINTF(" m: set Sensor Mode (0x%02X)%c" LB,
-			FL_IS_MODIFIED_u8(mode) ? FL_UNSAVE_u8(mode) : FL_MASTER_u8(mode),
-			FL_IS_MODIFIED_u8(mode) ? '*' : ' ');
-
-	if( sConfig_UnSaved.i16param != -32768 ){
-		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_UNSAVE_i16(param), '*' );
-	} else {
-		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_MASTER_i16(param), ' ');
-	}
-	{
-		V_PRINTF(" P: set Sensor Parameter2 ( ");//THT=%d, DUR=%d, %d, %d)%c" LB,"
-		tsADXL345Param *p = sConfig_UnSaved.bFlagParam ? &sConfig_UnSaved.sADXL345Param : &sAppData.sFlash.sData.sADXL345Param;
-
-		if(p->u16ThresholdTap != 0){
-			V_PRINTF("THT=%d ", p->u16ThresholdTap );
-		}
-		if(p->u16Duration != 0){
-			V_PRINTF("DUR=%d ", p->u16Duration );
-		}
-		if(p->u16Latency != 0){
-			V_PRINTF("LAT=%d ", p->u16Latency );
-		}
-		if(p->u16Window != 0){
-			V_PRINTF("WIN=%d ", p->u16Window );
-		}
-		if(p->u16ThresholdFreeFall != 0){
-			V_PRINTF("THF=%d ", p->u16ThresholdFreeFall );
-		}
-		if(p->u16TimeFreeFall != 0){
-			V_PRINTF("TIF=%d ", p->u16TimeFreeFall );
-		}
-		if(p->u16ThresholdActive != 0){
-			V_PRINTF("THA=%d ", p->u16ThresholdActive );
-		}
-		if(p->u16ThresholdInactive != 0){
-			V_PRINTF("THI=%d ", p->u16ThresholdInactive );
-		}
-		if(p->u16TimeInactive != 0){
-			V_PRINTF("TII=%d ", p->u16TimeInactive );
-		}
-
-		V_PRINTF(")%c"LB,
-			sConfig_UnSaved.bFlagParam ? '*' : ' ' );
-	}
-
-#endif
-#ifdef PARENT
 	{
 		uint32 u32baud =
 				FL_IS_MODIFIED_u32(baud_safe) ?
@@ -1254,8 +1210,6 @@ static void vSerUpdateScreen() {
 					FL_IS_MODIFIED_u8(parity) ? '*' : ' ');
 	}
 
-#endif
-
 	V_PRINTF(" k: set Enc Key (0x%08X)%c" LB,
 			FL_IS_MODIFIED_u32(EncKey) ? FL_UNSAVE_u32(EncKey) : FL_MASTER_u32(EncKey),
 			FL_IS_MODIFIED_u32(EncKey) ? '*' : ' ');
@@ -1264,18 +1218,94 @@ static void vSerUpdateScreen() {
 			FL_IS_MODIFIED_u32(Opt) ? FL_UNSAVE_u32(Opt) : FL_MASTER_u32(Opt),
 			FL_IS_MODIFIED_u32(Opt) ? '*' : ' ');
 
+#ifdef ROUTER
+	{
+		uint8 c = FL_IS_MODIFIED_u8(layer) ? FL_UNSAVE_u8(layer) : FL_MASTER_u8(layer);
+		V_PRINTF(" l: set layer (%d", c / 4 );
+		if( c%4 > 0 ){
+			V_PRINTF(".%d", c % 4);
+		}
+		V_PRINTF(")%c" LB,
+			FL_IS_MODIFIED_u8(layer) ? '*' : ' ');
+	}
+
+	V_PRINTF(" A: set access point address (0x%08X)%c" LB,
+			FL_IS_MODIFIED_u32(AddrHigherLayer) ? FL_UNSAVE_u32(AddrHigherLayer) : FL_MASTER_u32(AddrHigherLayer),
+			FL_IS_MODIFIED_u32(AddrHigherLayer) ? '*' : ' ');
+#endif
+
+#ifdef ENDDEVICE_INPUT
+	V_PRINTF(" d: set Sleep Dur (%d)%c" LB,
+			FL_IS_MODIFIED_u32(Slp) ? FL_UNSAVE_u32(Slp) : FL_MASTER_u32(Slp),
+			FL_IS_MODIFIED_u32(Slp) ? '*' : ' ');
+
+	V_PRINTF(" w: set Sensor Wait Dur (%d)%c" LB,
+			FL_IS_MODIFIED_u8(wait) ? FL_UNSAVE_u8(wait) : FL_MASTER_u8(wait),
+			FL_IS_MODIFIED_u8(wait) ? '*' : ' ');
+
+	V_PRINTF(" m: set Sensor Mode (0x%02X)%c" LB,
+			FL_IS_MODIFIED_u8(mode) ? FL_UNSAVE_u8(mode) : FL_MASTER_u8(mode),
+			FL_IS_MODIFIED_u8(mode) ? '*' : ' ');
+
+	if( sConfig_UnSaved.i16param != -32768 ){
+		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_UNSAVE_i16(param), '*' );
+	} else {
+		V_PRINTF(" p: set Sensor Parameter (%d)%c" LB, FL_MASTER_i16(param), ' ');
+	}
+
+	{
+		V_PRINTF(" P: set Sensor Parameter2 ( ");
+		tuParam *p = sConfig_UnSaved.bFlagParam ? &sConfig_UnSaved.uParam : &sAppData.sFlash.sData.uParam;
+
+		if( (sConfig_UnSaved.u8mode==0xFF&&sAppData.sFlash.sData.u8mode==0x35) || sConfig_UnSaved.u8mode==0x35 ){
+			if(p->sADXL345Param.u16ThresholdTap != 0){
+				V_PRINTF("THT=%d ", p->sADXL345Param.u16ThresholdTap );
+			}
+			if(p->sADXL345Param.u16Duration != 0){
+				V_PRINTF("DUR=%d ", p->sADXL345Param.u16Duration );
+			}
+			if(p->sADXL345Param.u16Latency != 0){
+				V_PRINTF("LAT=%d ", p->sADXL345Param.u16Latency );
+			}
+			if(p->sADXL345Param.u16Window != 0){
+				V_PRINTF("WIN=%d ", p->sADXL345Param.u16Window );
+			}
+			if(p->sADXL345Param.u16ThresholdFreeFall != 0){
+				V_PRINTF("THF=%d ", p->sADXL345Param.u16ThresholdFreeFall );
+			}
+			if(p->sADXL345Param.u16TimeFreeFall != 0){
+				V_PRINTF("TIF=%d ", p->sADXL345Param.u16TimeFreeFall );
+			}
+			if(p->sADXL345Param.u16ThresholdActive != 0){
+				V_PRINTF("THA=%d ", p->sADXL345Param.u16ThresholdActive );
+			}
+			if(p->sADXL345Param.u16ThresholdInactive != 0){
+				V_PRINTF("THI=%d ", p->sADXL345Param.u16ThresholdInactive );
+			}
+			if(p->sADXL345Param.u16TimeInactive != 0){
+				V_PRINTF("TII=%d ", p->sADXL345Param.u16TimeInactive );
+			}
+		}else{
+			V_PRINTF("%s ", p->au8Param );
+		}
+
+		V_PRINTF(")%c"LB,
+			sConfig_UnSaved.bFlagParam ? '*' : ' ' );
+	}
+
+#endif
+
 	V_PRINTF("---"LB);
 
-#ifdef CNFMST
 	V_PRINTF(" S: save Configuration" LB " R: reset to Defaults" LB);
+#ifdef OTA
 	V_PRINTF(" *** POWER ON END DEVICE NEAR THIS CONFIGURATOR ***" LB LB);
 #else
-	V_PRINTF(" S: save Configuration" LB " R: reset to Defaults" LB LB);
+	V_PRINTF(LB);
 #endif
 	//       0123456789+123456789+123456789+1234567894123456789+123456789+123456789+123456789
 }
 
-#ifdef PARENT
 /** @ingroup MASTER
  * UART のオプションを表示する
  */
@@ -1289,7 +1319,6 @@ static void vSerPrintUartOpt(uint8 u8conf) {
 				au8name_parity[u8conf & APPCONF_UART_CONF_PARITY_MASK],
 				au8name_stop[u8conf & APPCONF_UART_CONF_STOPBIT_MASK ? 1 : 0]);
 }
-#endif
 
 // アプリケーション依存度が高い関数を読み込み
 #include "../Source_User/Interactive_User.c"

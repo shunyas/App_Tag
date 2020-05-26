@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -118,7 +103,7 @@ tsAdrKeyA_Context sEndDevList; // 子機の発報情報を保存するデータ�
 static tsFILE sLcdStream, sLcdStreamBtm;
 #endif
 
-#ifdef USE_TOCOSTICK
+#ifdef USE_MONOSTICK
 static bool_t bVwd = FALSE;
 #endif
 static uint32 u32sec;
@@ -237,8 +222,6 @@ void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 
 	// パケットの表示
 	if (pRx->u8Cmd == TOCONET_PACKET_CMD_APP_DATA) {
-		// Turn on LED
-		sAppData.u32LedCt = u32TickCount_ms;
 
 		// LED の点灯を行う
 		sAppData.u16LedDur_ct = 25;
@@ -267,12 +250,8 @@ void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 		// パケットの種別により処理を変更
 		sRxPktInfo.u8pkt = G_OCTET();
 
-		if( sRxPktInfo.u8pkt == PKT_ID_BUTTON ){
-			vLED_Toggle();
-		}
-
 		// 出力用の関数を呼び出す
-		if (IS_APPCONF_OPT_SHT21()) {
+		if (IS_APPCONF_OPT_SmplTag()) {
 			vSerOutput_SmplTag3( sRxPktInfo, p);
 		} else if (IS_APPCONF_OPT_UART()) {
 			vSerOutput_Uart(sRxPktInfo, p);
@@ -310,22 +289,24 @@ void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 		// LED の点灯消灯を制御する
 		if (sAppData.u16LedDur_ct) {
 			sAppData.u16LedDur_ct--;
-			if (sAppData.u16LedDur_ct) {
-#ifdef USE_TOCOSTICK
-				vAHI_DoSetDataOut( 0, 0x01<<1 );
-#else
-				vPortSet_TrueAsLo(PORT_OUT2, TRUE);
-#endif
-			}
+			vAHI_DoSetDataOut( 0, 0x01<<1 );
 		} else {
-#ifdef USE_TOCOSTICK
 			vAHI_DoSetDataOut( 0x01<<1, 0 );
-#else
-			vPortSet_TrueAsLo(PORT_OUT2, FALSE);
-#endif
 		}
 
-#ifdef USE_TOCOSTICK
+		static uint32 u32LedCt_before = 0;
+		// LED の点灯消灯を制御する
+		if (sAppData.u32LedCt) {
+			u32LedCt_before = sAppData.u32LedCt;
+			sAppData.u32LedCt--;
+			vPortSetLo(PORT_OUT1);
+		}else if(u32LedCt_before == 1){
+			u32LedCt_before = 0;
+			vPortSetHi(PORT_OUT1);
+			sAppData.u8DO_State = 0;
+		}
+
+#ifdef USE_MONOSTICK
 		bVwd = !bVwd;
 		vPortSet_TrueAsLo(9, bVwd);
 #endif
@@ -411,7 +392,7 @@ static void vInitHardware(int f_warm_start) {
 	vPortSetHi( PORT_OUT1 );
 	vPortAsOutput( PORT_OUT1 );
 
-#ifdef USE_TOCOSTICK
+#ifdef USE_MONOSTICK
 	vPortSetLo(11);				// 外部のウォッチドッグを有効にする。
 	vPortSet_TrueAsLo(9, bVwd);	// VWDをいったんHiにする。
 	vPortAsOutput(11);			// DIO11を出力として使用する。
@@ -621,6 +602,29 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint16 u16adc2 = G_BE_WORD();(void)u16adc2;
 
 			uint8 u8mode = G_OCTET();(void)u8mode;
+			uint8 u8Bitmap = G_OCTET();
+
+			if(u8mode == 0x04){
+				if(u8Bitmap){
+					vPortSetLo(PORT_OUT1);
+					sAppData.u8DO_State = 1;
+					if(IS_APPCONF_OPT_DIO_AUTO_HI()){
+						sAppData.u32LedCt = 250;
+					}
+				}else{
+					vPortSetHi(PORT_OUT1);
+					sAppData.u8DO_State = 0;
+					sAppData.u32LedCt = 0;
+				}
+			}else{
+				if( IS_APPCONF_OPT_DIO_AUTO_HI() ){
+					// Turn on LED
+					sAppData.u32LedCt = 250;
+					sAppData.u8DO_State = 1;
+				}else{
+					vLED_Toggle();
+				}
+			}
 
 			// センサー情報
 			A_PRINTF(":ba=%04d:bt=%04d" LB,
@@ -634,30 +638,6 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 					sRxPktInfo.u8lqi_1st,
 					sRxPktInfo.u16fct & 0xFF,
 					sAppData.u8DO_State
-					);
-			vLcdRefresh();
-#endif
-		}
-		break;
-
-	case PKT_ID_SWING:
-		_C {
-			uint8 u8batt = G_OCTET();
-			uint16 u16adc1 = G_BE_WORD();
-			uint8 u8Bitmap = G_OCTET();
-
-			// センサー情報
-			A_PRINTF(":ba=%04d:a1=%04d:bt=%04X" LB,
-					DECODE_VOLT(u8batt), u16adc1, u8Bitmap );
-
-#ifdef USE_LCD
-			// LCD への出力
-			V_PRINTF_LCD("%03d:%08X:%03d:%02X:P:%04d:%04d:\n",
-					u32sec % 1000,
-					sRxPktInfo.u32addr_1st,
-					sRxPktInfo.u8lqi_1st,
-					sRxPktInfo.u16fct & 0xFF,
-					u8Bitmap
 					);
 			vLcdRefresh();
 #endif
@@ -796,7 +776,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16 i16z = G_BE_WORD();
 
 			// センサー情報
-			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=04%d:y=%04d:z=%04d" LB,
+			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=%04d:y=%04d:z=%04d" LB,
 					DECODE_VOLT(u8batt), u16adc1, u16adc2, i16x, i16y, i16z );
 
 #ifdef USE_LCD
@@ -826,7 +806,7 @@ void vSerOutput_Standard(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			int16 i16z = G_BE_WORD();
 
 			// センサー情報
-			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=04%d:y=%04d:z=%04d" LB,
+			A_PRINTF(":ba=%04d:a1=%04d:a2=%04d:x=%04d:y=%04d:z=%04d" LB,
 					DECODE_VOLT(u8batt), u16adc1, u16adc2, i16x, i16y, i16z );
 
 #ifdef USE_LCD
@@ -1052,25 +1032,28 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 		uint16 u16adc1 = G_BE_WORD();
 		uint16 u16adc2 = G_BE_WORD();
 		uint8 u8mode = G_OCTET();
-		uint8 u8DI_Bitmap = G_OCTET();
+		uint8 u8Bitmap = G_OCTET();
 
-		//	Bitmapを二進数に変換
-		uint16 u16bitmap=0;
-		//	DI4に入力があるかどうか
-		if( u8DI_Bitmap & 8 ){
-			u16bitmap += 1000;
-		}
-		//	AI3に入力があるかどうか
-		if( u8DI_Bitmap & 4 ){
-			u16bitmap += 100;
-		}
-		//	DI2に入力があるかどうか
-		if( u8DI_Bitmap & 2 ){
-			u16bitmap += 10;
-		}
-		//	AI1に入力があるかどうか
-		if( u8DI_Bitmap & 1 ){
-			u16bitmap += 1;
+		if(u8mode == 0x04){
+			if(u8Bitmap){
+				vPortSetLo(PORT_OUT1);
+				sAppData.u8DO_State = 1;
+				if(IS_APPCONF_OPT_DIO_AUTO_HI()){
+					sAppData.u32LedCt = 250;
+				}
+			}else{
+				vPortSetHi(PORT_OUT1);
+				sAppData.u8DO_State = 0;
+				sAppData.u32LedCt = 0;
+			}
+		}else{
+			if( IS_APPCONF_OPT_DIO_AUTO_HI() ){
+				// Turn on LED
+				sAppData.u32LedCt = 250;
+				sAppData.u8DO_State = 1;
+			}else{
+				vLED_Toggle();
+			}
 		}
 
 		A_PRINTF( ";"
@@ -1096,7 +1079,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				u16adc1,
 				u16adc2,
 				u8mode,
-				u16bitmap,
+				u8Bitmap,
 				'P',
 				sAppData.u8DO_State
 		);
@@ -1110,51 +1093,6 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				sRxPktInfo.u16fct & 0xFF,
 //				u8btn
 				sAppData.u8DO_State
-				);
-		vLcdRefresh();
-#endif
-	}
-
-	//	TWE-LITE SWING
-	if ( sRxPktInfo.u8pkt == PKT_ID_SWING ) {
-		uint8 u8batt = G_OCTET();
-		uint16 u16adc1 = G_BE_WORD();
-		uint8 u8Bitmap = G_OCTET();
-
-		A_PRINTF( ";"
-				"%d;"			// TIME STAMP
-				"%08X;"			// 受信機のアドレス
-				"%03d;"			// LQI  (0-255)
-				"%03d;"			// 連番
-				"%07x;"			// シリアル番号
-				"%04d;"			// 電源電圧 (0-3600, mV)
-				"%04d;"			// ADC1
-				"%04d;"			// 0
-				"%04d;"			// 0
-				"%04X;"			// DIのビットマップ
-				"%c;"			// SWINGフラグ
-				LB,
-				u32TickCount_ms / 1000,
-				sRxPktInfo.u32addr_rcvr & 0x0FFFFFFF,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct,
-				sRxPktInfo.u32addr_1st & 0x0FFFFFFF,
-				DECODE_VOLT(u8batt),
-				u16adc1,
-				0,
-				0,
-				u8Bitmap,
-				'W'
-		);
-
-#ifdef USE_LCD
-		// LCD への出力
-		V_PRINTF_LCD("%03d:%08X:%03d:%02X:P:%04d:%04d:\n",
-				u32sec % 1000,
-				sRxPktInfo.u32addr_1st,
-				sRxPktInfo.u8lqi_1st,
-				sRxPktInfo.u16fct & 0xFF,
-				u8Bitmap
 				);
 		vLcdRefresh();
 #endif
@@ -1654,7 +1592,7 @@ void vSerOutput_SmplTag3( tsRxPktInfo sRxPktInfo, uint8 *p) {
 				u16adc1 * 2 * 3, // 3300mV で 99% 相当
 				u16adc1,
 				u16adc2,
-				'S'
+				'A'
 		);
 
 #ifdef USE_LCD
@@ -2002,11 +1940,34 @@ void vSerOutput_Uart(tsRxPktInfo sRxPktInfo, uint8 *p) {
 			uint8	u8mode = G_OCTET();
 			uint8	u8bitmap = G_OCTET();
 
+			if(u8mode == 0x04){
+				if(u8bitmap){
+					vPortSetLo(PORT_OUT1);
+					sAppData.u8DO_State = 1;
+					if(IS_APPCONF_OPT_DIO_AUTO_HI()){
+						sAppData.u32LedCt = 250;
+					}
+				}else{
+					vPortSetHi(PORT_OUT1);
+					sAppData.u8DO_State = 0;
+					sAppData.u32LedCt = 0;
+				}
+			}else{
+				if( IS_APPCONF_OPT_DIO_AUTO_HI() ){
+					// Turn on LED
+					sAppData.u32LedCt = 250;
+					sAppData.u8DO_State = 1;
+				}else{
+					vLED_Toggle();
+				}
+			}
+
 			S_OCTET(u8batt);		// batt
 			S_BE_WORD(u16adc0);
 			S_BE_WORD(u16adc1);
 			S_OCTET( u8mode );
 			S_OCTET( u8bitmap );
+			S_OCTET( sAppData.u8DO_State );
 		}
 		break;
 
@@ -2027,7 +1988,7 @@ void vSerOutput_Secondary() {
 	//	オプションビットで設定されていたら表示しない
 	if(!IS_APPCONF_OPT_PARENT_OUTPUT()){
 		// 出力用の関数を呼び出す
-		if (IS_APPCONF_OPT_SHT21()) {
+		if (IS_APPCONF_OPT_SmplTag()) {
 			A_PRINTF(";%d;"LB, u32sec);
 		} else if (IS_APPCONF_OPT_UART()) {
 			// 無し
@@ -2058,7 +2019,6 @@ void vProcessSerialCmd(tsSerCmd_Context *pCmd) {
  */
 void vLED_Toggle( void )
 {
-
 	if( u32TickCount_ms-u32TempCount_ms > 500 ||	//	前回切り替わってから500ms以上たっていた場合
 		u32TempCount_ms == 0 ){						//	初めてここに入った場合( u32TickTimer_msが前回切り替わった場合はごめんなさい )
 		sAppData.u8DO_State = !sAppData.u8DO_State;

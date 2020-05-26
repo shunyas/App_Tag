@@ -1,8 +1,8 @@
 #########################################################################
 #
-# MODULE:   TOCOS-00001-IEEE802.15.4-I/O-Switch
+# MODULE:   JN-AN-1061-Jenie-Application-Template
 #
-# DESCRIPTION: TCS_00001_Coord MakeFile
+# DESCRIPTION: MakeFile
 #
 ############################################################################
 # 
@@ -31,6 +31,12 @@
 # $Id: Makefile 13257 2009-05-26 15:11:24Z mwild $ 
 #
 #############################################################################
+
+##########################################################################
+# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT VERSION 1).
+##########################################################################
 
 DIRS	= Parent Router EndDevice_Input EndDevice_Remote
 

@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #include <jendefs.h>
 
@@ -26,7 +11,6 @@
 
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vStoreSensorValue();
-static uint8 readInput();
 
 /*
  * 最初に遷移してくる状態
@@ -63,7 +47,11 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			}
 
 			// 最初にパケットを送りたくないのでチャタリング対策状態へ遷移後、割り込みがあるまでスリープ
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP);
+			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){		//	スリープしない場合
+				ToCoNet_Event_SetState(pEv, E_STATE_RUNNING);
+			}else{
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_CHAT_SLEEP);
+			}
 		}
 
 	}
@@ -77,33 +65,72 @@ PRSEV_HANDLER_DEF(E_STATE_RUNNING, tsEvent *pEv, teEvent eEvent, uint32 u32evarg
 		vSnsObj_Process(&sAppData.sADC, E_ORDER_KICK);
 	}
 	if (eEvent == E_ORDER_KICK) {
-		uint8	au8Data[7];
-		uint8*	q = au8Data;
-		S_OCTET(sAppData.sSns.u8Batt);
-
-		S_BE_WORD(sAppData.sSns.u16Adc1);
-		S_BE_WORD(sAppData.sSns.u16Adc2);
-
-		//	立ち上がりで起動 or 立ち下がりで起動
-		if( sAppData.sFlash.sData.i16param == 1 ){
-			S_OCTET(0x01);
-		} else {
-			S_OCTET(0x00);
+		uint8 DI_Bitmap = bPortRead(DIO_BUTTON) ? 0x01 : 0x00;
+		if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+			vPortDisablePullup(DIO_BUTTON);
 		}
 
-		/*	DIの入力状態を取得	*/
-		uint8 DI_Bitmap = readInput();
-		S_OCTET( DI_Bitmap );
+		uint8*	q;
+		bool_t bOk = FALSE;
+		if( IS_APPCONF_OPT_APP_TWELITE() ){		//超簡単!TWEアプリあてに送信する場合
+			uint8	au8Data[7];
+			q = au8Data;
+
+			// DIO の設定
+			S_OCTET(DI_Bitmap);
+			S_OCTET(0x0F);
+
+			// PWM(AI)の設定
+			uint8 u8MSB = (sAppData.sSns.u16Adc1 >> 2) & 0xFF;
+			S_OCTET(u8MSB);
+			S_OCTET(0x00);
+			S_OCTET(0x00);
+			S_OCTET(0x00);
+
+			// 下2bitを u8LSBs に詰める
+			uint8 u8LSBs = sAppData.sSns.u16Adc1|0x03;
+			S_OCTET(u8LSBs);
+
+			bOk = bTransmitToAppTwelite( au8Data, q-au8Data );
+		}else{									// 無線タグアプリ宛に送信する場合
+			uint16 u16RandNum = ToCoNet_u16GetRand();
+			/*	DIの入力状態を取得	*/
+			uint8	au8Data[7];
+			q = au8Data;
+			S_OCTET(sAppData.sSns.u8Batt);
+			S_BE_WORD(sAppData.sSns.u16Adc1);
+			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+				S_BE_WORD(u16RandNum);
+			}else{
+				S_BE_WORD(sAppData.sSns.u16Adc2);
+			}
+
+			//	立ち上がりで起動 or 立ち下がりで起動
+			S_OCTET(sAppData.sFlash.sData.i16param&0xFF);
+
+			/*	DIの入力状態を取得	*/
+			S_OCTET( DI_Bitmap );
+
+			bOk = bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data );
+		}
 
 		sAppData.u16frame_count++;
 
-		if ( bTransmitToParent( sAppData.pContextNwk, au8Data, q-au8Data ) ) {
+		if ( bOk ) {
 			ToCoNet_Tx_vProcessQueue(); // 送信処理をタイマーを待たずに実行する
 			V_PRINTF(LB"TxOk");
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
+			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
+			}else{
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_TX);
+			}
 		} else {
 			V_PRINTF(LB"TxFl");
-			ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
+			if( (sAppData.sFlash.sData.i16param&0x4) != 0x00 ){
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_WAIT_POWEROFF);
+			}else{
+				ToCoNet_Event_SetState(pEv, E_STATE_APP_SLEEP); // 送信失敗
+			}
 		}
 
 		V_PRINTF(" FR=%04X", sAppData.u16frame_count);
@@ -131,7 +158,7 @@ PRSEV_HANDLER_DEF(E_STATE_APP_CHAT_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u
 
 			//	割り込み禁止でスリープ
 			pEv->bKeepStateOnSetAll = TRUE;		//	この状態から起床
-			vAHI_DioWakeEnable(0, PORT_INPUT_MASK); // DISABLE DIO WAKE SOURCE
+			vAHI_DioWakeEnable(0, PORT_INPUT_MASK|PORT_INPUT_SUBMASK); // DISABLE DIO WAKE SOURCE
 
 			ToCoNet_vSleep(E_AHI_WAKE_TIMER_1, 200UL, FALSE, FALSE);
 
@@ -160,17 +187,30 @@ PRSEV_HANDLER_DEF(E_STATE_APP_SLEEP, tsEvent *pEv, teEvent eEvent, uint32 u32eva
 
 		(void)u32AHI_DioInterruptStatus(); // clear interrupt register
 
-		vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 
-		if(sAppData.sFlash.sData.i16param == 1){
+		if( (sAppData.sFlash.sData.i16param&2) != 0 ){
+			vAHI_DioWakeEnable( PORT_INPUT_MASK|PORT_INPUT_SUBMASK, 0); // also use as DIO WAKE SOURCE
+			vAHI_DioWakeEdge( PORT_INPUT_SUBMASK, PORT_INPUT_MASK ); // 割り込みエッジ（立上がりに設定）
+		}else if(sAppData.sFlash.sData.i16param == 1){
+			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 			vAHI_DioWakeEdge(PORT_INPUT_MASK, 0); // 割り込みエッジ（立上がりに設定）
 		} else {
+			vAHI_DioWakeEnable(PORT_INPUT_MASK, 0); // also use as DIO WAKE SOURCE
 			vAHI_DioWakeEdge(0, PORT_INPUT_MASK); // 割り込みエッジ（立下りに設定）
 		}
 
 		// wake up using wakeup timer as well.
 		ToCoNet_vSleep(E_AHI_WAKE_TIMER_0, 0, FALSE, FALSE ); // PERIODIC RAM OFF SLEEP USING WK0
 
+	}
+}
+
+/*	電池切れを待つ	*/
+PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_POWEROFF, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
+	if (eEvent == E_EVENT_NEW_STATE) {
+		// Sleep は必ず E_EVENT_NEW_STATE 内など１回のみ呼び出される場所で呼び出す。
+		V_PRINTF(LB"Complete!!");
+		V_FLUSH();
 	}
 }
 
@@ -183,6 +223,7 @@ static const tsToCoNet_Event_StateHandler asStateFuncTbl[] = {
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_TX),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_SLEEP),
 	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_CHAT_SLEEP),
+	PRSEV_HANDLER_TBL_DEF(E_STATE_APP_WAIT_POWEROFF),
 	PRSEV_HANDLER_TBL_TRM
 };
 
@@ -333,6 +374,7 @@ void vInitAppButton() {
  * センサー値を格納する
  */
 static void vStoreSensorValue() {
+#ifndef SWING
 	// パルス数の読み込み
 	bAHI_Read16BitCounter(E_AHI_PC_0, &sAppData.sSns.u16PC1); // 16bitの場合
 	// パルス数のクリア
@@ -342,6 +384,10 @@ static void vStoreSensorValue() {
 	bAHI_Read16BitCounter(E_AHI_PC_1, &sAppData.sSns.u16PC2); // 16bitの場合
 	// パルス数のクリア
 	bAHI_Clear16BitPulseCounter(E_AHI_PC_1); // 16bitの場合
+#endif
+
+	// センサー用の電源制御回路を Hi に戻す
+	vPortSetSns(FALSE);
 
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[u8ADCPort[0]];
@@ -352,29 +398,4 @@ static void vStoreSensorValue() {
 	if (sAppData.sSns.u16Adc1 >= VOLT_SUPERCAP_CONTROL) {
 		vPortSetLo(DIO_SUPERCAP_CONTROL);
 	}
-}
-
-/*
- * DIの状態をBitMapにして返す
- */
-static uint8 readInput(void)
-{
-	uint8	bitmap = 0;
-	bool_t	btn;
-	uint8	i;
-
-	uint8 au8PortTbl_DIn[4] = {
-		PORT_INPUT1,
-		PORT_INPUT2,
-		PORT_INPUT3,
-		PORT_INPUT4
-	};
-
-	for( i=0; i<4; i++ ){
-		btn = bPortRead(au8PortTbl_DIn[i]);
-		if( btn ){
-			bitmap |= ( 1UL<<i );
-		}
-	}
-	return bitmap;
 }

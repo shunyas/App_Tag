@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -79,7 +64,7 @@
 static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg);
 static void vInitHardware(int f_warm_start);
 
-static void vSerialInit();
+static void vSerialInit( uint32 u32Baud, tsUartOpt *pUartOpt );
 void vSerInitMessage();
 void vProcessSerialCmd(tsSerCmd_Context *pCmd);
 
@@ -98,6 +83,8 @@ tsSerialPortSetup sSerPort;
 
 // Timer object
 tsTimerContext sTimerApp;
+
+static bool_t bVwd = FALSE;
 
 /****************************************************************************/
 /***        FUNCTIONS                                                     ***/
@@ -127,12 +114,27 @@ static void vProcessEvCore(tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 				u8sublayer = 0;
 			}
 
+			// 再送回数の指定
+			uint8 u8retry = (sAppData.sFlash.sData.u8pow>>4)&0x0F;
+			sAppData.sNwkLayerTreeConfig.u8TxRetryCtUp = u8retry==0x0F ? 0xFF : u8retry>0x07 ? 0x07 : u8retry;
+
 			sAppData.sNwkLayerTreeConfig.u8Layer = u8layer;
 			sAppData.sNwkLayerTreeConfig.u8MaxSublayers = u8sublayer;
 
 			if (IS_APPCONF_OPT_SECURE()) {
 				bool_t bRes = bRegAesKey(sAppData.sFlash.sData.u32EncKey);
 				A_PRINTF(LB "*** Register AES key (%d) ***", bRes);
+			}
+
+			// 接続先アドレスの指定
+			if( sAppData.sFlash.sData.u32AddrHigherLayer ){
+				sAppData.sNwkLayerTreeConfig.u8Second_To_Rescan = 0xFF;		// 上位レイヤを再探索しない
+				sAppData.sNwkLayerTreeConfig.u8Second_To_Relocate = 0xFF;	// 上位レイヤと定期ポーリングをしない
+				sAppData.sNwkLayerTreeConfig.u8Ct_To_Relocate = 0xFF;		// 上位レイヤを定期ポーリングを失敗させない
+
+				sAppData.sNwkLayerTreeConfig.u8StartOpt = 0x01;				// 開始時にスキャンしない
+				sAppData.sNwkLayerTreeConfig.u8ResumeOpt = 0x01;			// 過去にあった接続先があると仮定する
+				sAppData.sNwkLayerTreeConfig.u32AddrHigherLayer = (sAppData.sFlash.sData.u32AddrHigherLayer&0x80000000) ? sAppData.sFlash.sData.u32AddrHigherLayer:sAppData.sFlash.sData.u32AddrHigherLayer|0x80000000;
 			}
 
 			// Router として始動
@@ -200,12 +202,11 @@ void cbAppColdStart(bool_t bAfterAhiInit) {
 		ToCoNet_Event_Register_State_Machine(vProcessEvCore); // main state machine
 
 		// Other Hardware
-		vSerialInit();
-		ToCoNet_vDebugInit(&sSerStream);
-		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
-
 		vInitHardware(FALSE);
 		Interactive_vInit();
+
+		ToCoNet_vDebugInit(&sSerStream);
+		ToCoNet_vDebugLevel(TOCONET_DEBUG_LEVEL);
 
 		// START UP MESSAGE
 		A_PRINTF(LB "*** " APP_NAME " (Router) %d.%02d-%d ***", VERSION_MAIN, VERSION_SUB, VERSION_VAR);
@@ -289,6 +290,8 @@ PUBLIC void cbToCoNet_vRxEvent(tsRxDataApp *pRx) {
 	// 本処理はアドレス指定がTOCONET_NWK_ADDR_NEIGHBOUR_ABOVEの場合で、一端中継機が受け取り
 	// その中継機のアドレス、受信時のLQIを含めて親機に伝達する方式である。
 	if (pRx->auData[0] == 'T') {
+		sAppData.u32LedCt = 25;
+
 		tsTxDataApp sTx;
 		memset(&sTx, 0, sizeof(sTx));
 		uint8 *q = sTx.auData;
@@ -369,13 +372,13 @@ void cbToCoNet_vNwkEvent(teEvent eEvent, uint32 u32arg) {
 			tsRoutePktInfo *pInfo = (void*)u32arg;
 
 			if (pInfo->bUpstream) {
-				sAppData.u32LedCt = u32TickCount_ms;
+				sAppData.u32LedCt = 25;
 			}
 		}
 		break;
 
 	case E_EVENT_TOCONET_NWK_MESSAGE_POOL_REQUEST:
-		sAppData.u32LedCt = u32TickCount_ms;
+		sAppData.u32LedCt = 25;
 		break;
 
 	case E_EVENT_TOCONET_NWK_MESSAGE_POOL:
@@ -430,28 +433,22 @@ void cbToCoNet_vNwkEvent(teEvent eEvent, uint32 u32arg) {
  * NOTES:
  * None.
  ****************************************************************************/
-//
-PUBLIC void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
+void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
 	switch (u32DeviceId) {
-	case E_AHI_DEVICE_ANALOGUE:
-		break;
-
-	case E_AHI_DEVICE_SYSCTRL:
-		break;
-
 	case E_AHI_DEVICE_TICK_TIMER:
-		// LED BLINK
-		vPortSet_TrueAsLo(PORT_KIT_LED2, u32TickCount_ms & 0x400);
-
-		// LED ON when receive
-		if (u32TickCount_ms - sAppData.u32LedCt < 300) {
-			vPortSetLo(PORT_KIT_LED1);
+		// LED の点灯消灯を制御する
+		if (sAppData.u32LedCt) {
+			sAppData.u32LedCt--;
+			if (sAppData.u32LedCt) {
+				vAHI_DoSetDataOut( 0, 0x01<<1 );
+			}
 		} else {
-			vPortSetHi(PORT_KIT_LED1);
+			vAHI_DoSetDataOut( 0x01<<1, 0 );
 		}
-		break;
 
-	case E_AHI_DEVICE_TIMER0:
+		bVwd = !bVwd;
+		vPortSet_TrueAsLo(9, bVwd);
+
 		break;
 
 	default:
@@ -478,28 +475,8 @@ PUBLIC void cbToCoNet_vHwEvent(uint32 u32DeviceId, uint32 u32ItemBitmap) {
  * NOTES:
  *   Do not put a big job here.
  ****************************************************************************/
-//
-PUBLIC uint8 cbToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
-	uint8 u8handled = FALSE;
-
-	switch (u32DeviceId) {
-	case E_AHI_DEVICE_ANALOGUE:
-		break;
-
-	case E_AHI_DEVICE_SYSCTRL:
-		break;
-
-	case E_AHI_DEVICE_TIMER0:
-		break;
-
-	case E_AHI_DEVICE_TICK_TIMER:
-		break;
-
-	default:
-		break;
-	}
-
-	return u8handled;
+uint8 cbToCoNet_u8HwInt(uint32 u32DeviceId, uint32 u32ItemBitmap) {
+	return FALSE;
 }
 
 /****************************************************************************
@@ -516,23 +493,66 @@ PRIVATE void vInitHardware(int f_warm_start) {
 	// インタラクティブモードの初期化
 	Interactive_vInit();
 
-	// LED's
-	vPortAsOutput(PORT_KIT_LED1);
-	vPortAsOutput(PORT_KIT_LED2);
-	vPortAsOutput(PORT_KIT_LED3);
-	vPortAsOutput(PORT_KIT_LED4);
-	vPortSetHi(PORT_KIT_LED1);
-	vPortSetHi(PORT_KIT_LED2);
-	vPortSetHi(PORT_KIT_LED3);
-	vPortSetHi(PORT_KIT_LED4);
+	// Serial Port の初期化
+	{
+		tsUartOpt sUartOpt;
+		memset(&sUartOpt, 0, sizeof(tsUartOpt));
+		uint32 u32baud = UART_BAUD;
 
-	// activate tick timers
-	memset(&sTimerApp, 0, sizeof(sTimerApp));
-	sTimerApp.u8Device = E_AHI_DEVICE_TIMER0;
-	sTimerApp.u16Hz = 1;
-	sTimerApp.u8PreScale = 10;
-	vTimerConfig(&sTimerApp);
-	vTimerStart(&sTimerApp);
+		// BPS ピンが Lo の時は 38400bps
+		vPortAsInput(PORT_BAUD);
+		if (sAppData.bFlashLoaded && (bPortRead(PORT_BAUD) || IS_APPCONF_OPT_UART_FORCE_SETTINGS() )) {
+			u32baud = sAppData.sFlash.sData.u32baud_safe;
+			sUartOpt.bHwFlowEnabled = FALSE;
+			sUartOpt.bParityEnabled = UART_PARITY_ENABLE;
+			sUartOpt.u8ParityType = UART_PARITY_TYPE;
+			sUartOpt.u8StopBit = UART_STOPBITS;
+
+			// 設定されている場合は、設定値を採用する (v1.0.3)
+			switch(sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_PARITY_MASK) {
+			case 0:
+				sUartOpt.bParityEnabled = FALSE;
+				break;
+			case 1:
+				sUartOpt.bParityEnabled = TRUE;
+				sUartOpt.u8ParityType = E_AHI_UART_ODD_PARITY;
+				break;
+			case 2:
+				sUartOpt.bParityEnabled = TRUE;
+				sUartOpt.u8ParityType = E_AHI_UART_EVEN_PARITY;
+				break;
+			}
+
+			// ストップビット
+			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_STOPBIT_MASK) {
+				sUartOpt.u8StopBit = E_AHI_UART_2_STOP_BITS;
+			} else {
+				sUartOpt.u8StopBit = E_AHI_UART_1_STOP_BIT;
+			}
+
+			// 7bitモード
+			if (sAppData.sFlash.sData.u8parity & APPCONF_UART_CONF_WORDLEN_MASK) {
+				sUartOpt.u8WordLen = 7;
+			} else {
+				sUartOpt.u8WordLen = 8;
+			}
+
+			vSerialInit(u32baud, &sUartOpt);
+		} else {
+			vSerialInit(u32baud, NULL);
+		}
+
+	}
+
+	// 受信したときにDO1を光らせる
+	bAHI_DoEnableOutputs(TRUE);
+	vAHI_DoSetDataOut( 0x01<<1, 0 );
+
+	// 外部ウォッチドッグタイマー用
+	vPortSetLo(11);				// 外部のウォッチドッグを有効にする。
+	vPortSet_TrueAsLo(9, bVwd);	// VWDをいったんHiにする。
+	vPortAsOutput(11);			// DIO11を出力として使用する。
+	vPortAsOutput(9);			// DIO9を出力として使用する。
 }
 
 /****************************************************************************
@@ -544,7 +564,7 @@ PRIVATE void vInitHardware(int f_warm_start) {
  * RETURNS:
  *
  ****************************************************************************/
-void vSerialInit(void) {
+void vSerialInit( uint32 u32Baud, tsUartOpt *pUartOpt ) {
 	/* Create the debug port transmit and receive queues */
 	static uint8 au8SerialTxBuffer[1024];
 	static uint8 au8SerialRxBuffer[512];
@@ -588,10 +608,12 @@ void vSerNwkInfoV() {
 	V_PRINTF("** Nwk Conf"
 			 LB"* layer = %d"
 			 LB"* sublayer = %d"
-			 LB"* state = %d",
+			 LB"* state = %d"
+			 LB"* access point = %08X"LB,
 		pc->sInfo.u8Layer,
 		pc->sInfo.u8LayerSub,
-		pc->sInfo.u8State
+		pc->sInfo.u8State,
+		pc->u32AddrHigherLayer
 	);
 }
 /****************************************************************************/

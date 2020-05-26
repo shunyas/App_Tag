@@ -1,26 +1,13 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #ifndef APPSAVE_H_
 #define APPSAVE_H_
 
 #include <jendefs.h>
+
+#define PARAM_MAX_LEN 18
 
 typedef struct _tsADXL345Param{
 	uint16	u16ThresholdTap;
@@ -34,6 +21,11 @@ typedef struct _tsADXL345Param{
 	uint16	u16TimeInactive;
 }tsADXL345Param;
 
+typedef union{
+	uint8 au8Param[PARAM_MAX_LEN];
+	tsADXL345Param sADXL345Param;
+}tuParam;
+
 /** @ingroup FLASH
  * フラッシュ格納データ構造体
  */
@@ -43,6 +35,9 @@ typedef struct _tsFlashApp {
 
 	uint32 u32appid;		//!< アプリケーションID
 	uint32 u32chmask;		//!< 使用チャネルマスク（３つまで）
+
+	uint32 u32baud_safe;	//!< ボーレート
+	uint8 u8parity;         //!< パリティ 0:none, 1:odd, 2:even
 
 	uint8 u8id;				//!< 論理ＩＤ (子機 1～100まで指定)
 	uint8 u8ch;				//!< チャネル（未使用、チャネルマスクに指定したチャネルから選ばれる）
@@ -60,7 +55,8 @@ typedef struct _tsFlashApp {
 	uint8 u8mode;			//!< センサの種類
 	int16 i16param;			//!< 選択したセンサ特有のパラメータ
 	uint8 bFlagParam;		//!< sADXL345Param の格納状況
-	tsADXL345Param sADXL345Param;
+	tuParam uParam;
+//	tsADXL345Param sADXL345Param;
 } tsFlashApp;
 
 

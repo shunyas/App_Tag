@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -58,7 +43,6 @@ extern tsFILE sDebugStream;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data );
 PRIVATE void vProcessSnsObj_ADXL345(void *pvObj, teEvent eEvent);
 PRIVATE bool_t bSetFIFO( void );
 
@@ -140,11 +124,11 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 //			com = 0x0F;		//	3200Hz Sampling frequency
 //			break;
 		default:
-			com = 0x08;		//	Low Power Mode, 25Hz Sampling frequency
+			com = 0x08;		//	25Hz Sampling frequency
 			break;
 		}
 	}else{
-		com = 0x1A;		//	Low Power Mode, 100Hz Sampling frequency
+		com = 0x19;		//	50Hz Sampling frequency
 	}
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 
@@ -394,6 +378,31 @@ bool_t bADXL345_Setting( int16 i16mode, tsADXL345Param sParam, bool_t bLink )
 PUBLIC bool_t bADXL345reset()
 {
 	bool_t bOk = TRUE;
+
+	//	レジスタ内を初期値にする (初期値に関してはADXL34xのデータシート参照)
+	uint8 com = 0x00;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_TAP, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_OFSX, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_OFSY, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_OFSZ, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DUR, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_LATENT, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_WINDOW, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_ACT, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_INACT, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_INACT, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_ACT_INACT_CTL, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_THRESH_FF, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TIME_FF, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_TAP_AXES, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_POWER_CTL, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_ENABLE, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_INT_MAP, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_DATA_FORMAT, 1, &com );
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_CTL, 1, &com );
+	com = 0x0A;
+	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
+
 	return bOk;
 }
 
@@ -438,20 +447,7 @@ PUBLIC int16 i16ADXL345readResult( uint8 u8axis )
 	int16	i16result=0;
 	uint8	au8data[2];
 
-	//	各軸の読み込み
-	switch( u8axis ){
-		case ADXL345_IDX_X:
-			bOk &= bGetAxis( ADXL345_IDX_X, au8data );
-			break;
-		case ADXL345_IDX_Y:
-			bOk &= bGetAxis( ADXL345_IDX_Y, au8data );
-			break;
-		case ADXL345_IDX_Z:
-			bOk &= bGetAxis( ADXL345_IDX_Z, au8data );
-			break;
-		default:
-			bOk = FALSE;
-	}
+	bOk &= bGetAxis( u8axis, au8data );
 	i16result = (((au8data[1] << 8) | au8data[0]));
 	i16result = i16result*4/10;			//	1bitあたり4mg  10^-2まで有効
 
@@ -521,7 +517,7 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 {
 	static 	int16	ai16TmpAccel[3]={0, 0, 0};
 	bool_t	bOk = TRUE;
-	uint8	au8data[2];
+	uint8	au8data[6];
 	int16	max = 0x8000;
 	uint8	num;				//	FIFOのデータ数
 	uint8	i;
@@ -537,22 +533,16 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 
 	//	FIFOの中身を全部読む
 	num = (num&0x7f);
-	if( num == READ_FIFO ){
+	if( num == READ_FIFO_SHAKE ){
 		//	各軸の読み込み
 		for( i=0; i<num; i++ ){
+			GetAxis(bOk, au8data);
 			//	X軸
-			bOk &= bGetAxis( ADXL345_IDX_X, au8data );
 			x[i] = (((au8data[1] << 8) | au8data[0]));
-		}
-		for( i=0; i<num; i++ ){
 			//	Y軸
-			bOk &= bGetAxis( ADXL345_IDX_Y, au8data );
-			y[i] = (((au8data[1] << 8) | au8data[0]));
-		}
-		for( i=0; i<num; i++ ){
+			y[i] = (((au8data[3] << 8) | au8data[2]));
 			//	Z軸
-			bOk &= bGetAxis( ADXL345_IDX_Z, au8data );
-			z[i] = (((au8data[1] << 8) | au8data[0]));
+			z[i] = (((au8data[5] << 8) | au8data[4]));
 		}
 		//	FIFOの設定をもう一度
 		bOk &= bSetFIFO();
@@ -578,7 +568,7 @@ PUBLIC bool_t bShakereadResult( int16* ai16accel )
 				count++;
 			}
 #if 0
-			vfPrintf(& sSerStream, "\n\r%2d:%d,%d,%d %d", i, x[i], y[i], z[i], sum[i] );
+			vfPrintf( &sSerStream, "\n\r%2d:%d,%d,%d %d", i, x[i], y[i], z[i], sum[i] );
 			SERIAL_vFlush(E_AHI_UART_0);
 		}
 		vfPrintf( &sSerStream, "\n\r" );
@@ -633,12 +623,16 @@ PRIVATE bool_t bSetFIFO( void )
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/
-PRIVATE bool_t bGetAxis( uint8 u8axis, uint8* au8data )
+PUBLIC bool_t bGetAxis( uint8 u8axis, uint8* au8data )
 {
 	bool_t bOk = TRUE;
 
-	bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_AXIS[u8axis], 0, NULL );
-	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 2, au8data );
+	if( u8axis==ADXL345_IDX_X || u8axis==ADXL345_IDX_Y || u8axis==ADXL345_IDX_Z ){
+		bOk &= bSMBusWrite( ADXL345_ADDRESS, ADXL345_AXIS[u8axis], 0, NULL );
+		bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 2, au8data );
+	}else{
+		bOk = FALSE;
+	}
 
 	return bOk;
 }
@@ -735,14 +729,14 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 				break;
 			}
 #endif
-			if( u16modeflag != NEKOTTER && u16modeflag != SHAKE ){
-				pObj->ai16Result[ADXL345_IDX_X] = i16ADXL345readResult(ADXL345_IDX_X);
-				pObj->ai16Result[ADXL345_IDX_Y] = i16ADXL345readResult(ADXL345_IDX_Y);
-				pObj->ai16Result[ADXL345_IDX_Z] = i16ADXL345readResult(ADXL345_IDX_Z);
-			}else if(u16modeflag == NEKOTTER){
+			if(u16modeflag == NEKOTTER){
 				bNekotterreadResult(pObj->ai16Result);
 			}else if(u16modeflag == SHAKE){
 				bShakereadResult(pObj->ai16Result);
+			}else{
+				pObj->ai16Result[ADXL345_IDX_X] = i16ADXL345readResult(ADXL345_IDX_X);
+				pObj->ai16Result[ADXL345_IDX_Y] = i16ADXL345readResult(ADXL345_IDX_Y);
+				pObj->ai16Result[ADXL345_IDX_Z] = i16ADXL345readResult(ADXL345_IDX_Z);
 			}
 
 			// data arrival

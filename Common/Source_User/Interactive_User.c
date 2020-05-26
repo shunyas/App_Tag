@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 // 本ファイルは Interactive.c から include される
 
@@ -29,6 +14,7 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 	p->u32appid = APP_ID;
 	p->u32chmask = CHMASK;
 	p->u8ch = CHANNEL;
+
 #ifdef ENDDEVICE_INPUT
 	p->u8pow = 0x13;
 #else
@@ -36,57 +22,42 @@ static void Config_vSetDefaults(tsFlashApp *p) {
 #endif
 	p->u8id = 0;
 
-#ifdef PARENT
-	p->u32baud_safe = UART_BAUD;
+	p->u32baud_safe = UART_BAUD_SAFE;
 	p->u8parity = 0;
-#endif
 
 #ifdef ENDDEVICE_INPUT
 	p->u16RcClock = 10000;
 	p->u32Slp = DEFAULT_SLEEP_DUR_ms;
 
-#ifdef LITE2525A
-	p->u8wait = 0;
-#elif CNFMST
-	p->u8wait = 0;
-#elif SWING
+#if defined(LITE2525A) || defined(OTA) || defined(SWING)
 	p->u8wait = 0;
 #else
 	p->u8wait = 30;
 #endif
 
 	p->u8mode = DEFAULT_SENSOR;
-#ifdef LITE2525A
+#if defined(LITE2525A) || defined(OTA)
 	p->i16param = 15;
-#elif CNFMST
-	p->i16param = 15;
+#elif defined(SWING)
+	p->i16param = 4;
 #else
 	p->i16param = 0;
 #endif
 
 	p->bFlagParam = TRUE;
-	memset( &p->sADXL345Param, 0x00, sizeof(tsADXL345Param));
+	memset( &p->uParam.au8Param, 0x00, PARAM_MAX_LEN);
 #endif
 
 	p->u32Opt = E_APPCONF_OPT_TO_ROUTER; // デフォルトの設定ビット
-#ifdef PARENT
-#ifdef TWX0003P
-	p->u32Opt = p->u32Opt | 0x20; // SimpleTagにする
-#endif
-#endif
-
-#ifdef ENDDEVICE_INPUT
-#ifdef LITE2525A
+#if defined(LITE2525A) || defined(OTA)
 	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
-#elif CNFMST
-	p->u32Opt = p->u32Opt | 0x10;	// App_TweLite宛に送る
-#elif SWING
+#elif defined(SWING)
 	p->u32Opt = p->u32Opt | 0x10 | 0x400;	// App_TweLite宛に送る
-#endif
 #endif
 
 #ifdef ROUTER
-	p->u8layer = 5; // Layer:1, SubLayer:1
+	p->u8layer = 4; // Layer:1
+	p->u32AddrHigherLayer = 0; // 指定送信先なし
 #endif
 
 	p->u32EncKey = DEFAULT_ENC_KEY;

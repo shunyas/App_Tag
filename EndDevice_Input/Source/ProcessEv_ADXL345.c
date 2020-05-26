@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #include <jendefs.h>
 
@@ -58,7 +43,7 @@ static int16 i16AveAccel = 0;
 static bool_t bFaceUp = TRUE;
 static bool_t bNoChangePkt = FALSE;
 
-static uint8 au8TmpData[7];
+static uint8 au8TmpData[12];
 static uint8 u8TmpLength = 0;
 
 static tsSnsObj sSnsObj;
@@ -172,18 +157,19 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		vADXL345_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
 			V_PRINTF(LB "*** ADXL345 Setting...");
-			bADXL345_Setting( sAppData.sFlash.sData.i16param&0x03FF, sAppData.sFlash.sData.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
-			if( sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap != 0 ){
-				au16ThTable[0] = sAppData.sFlash.sData.sADXL345Param.u16ThresholdTap;
+			bADXL345reset();
+			bADXL345_Setting( sAppData.sFlash.sData.i16param&0x03FF, sAppData.sFlash.sData.uParam.sADXL345Param, IS_APPCONF_OPT_ADXL345_DISABLE_LINK() );
+			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap != 0 ){
+				au16ThTable[0] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdTap;
 			}
-			if( sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall != 0 ){
-				au16ThTable[1] = sAppData.sFlash.sData.sADXL345Param.u16ThresholdFreeFall;
+			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdFreeFall != 0 ){
+				au16ThTable[1] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdFreeFall;
 			}
-			if( sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive != 0 ){
-				au16ThTable[2] = sAppData.sFlash.sData.sADXL345Param.u16ThresholdActive;
+			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdActive != 0 ){
+				au16ThTable[2] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdActive;
 			}
-			if( sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive != 0 ){
-				au16ThTable[3] = sAppData.sFlash.sData.sADXL345Param.u16ThresholdInactive;
+			if( sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdInactive != 0 ){
+				au16ThTable[3] = sAppData.sFlash.sData.uParam.sADXL345Param.u16ThresholdInactive;
 			}
 			vRead_Register();
 		}
@@ -895,30 +881,30 @@ static bool_t bSendToSampMonitor( void ){
 				if( i16AveAccel > au16ThTable[0] ){
 					if( sAppData.sFlash.sData.i16param == SHAKE_ACC1 ){
 						if(!bBack){
-							u8Power = u8PowTemp>0 ? u8Power+1 : u8Power ;
+							u8Power = u8PowTemp>0 ? u8Power+1 : u8Power;
 							if( u8Power >= 4 ){
 								bBack = TRUE;
 							}
 						}else{
-							u8Power = u8PowTemp>0 ? u8Power-1 : u8Power ;
+							u8Power = u8PowTemp>0 ? u8Power-1 : u8Power;
 							if( u8Power <= 0 ){
 								bBack = FALSE;
 							}
 						}
 					}else
 					if( sAppData.sFlash.sData.i16param == SHAKE_ACC2 ){
-						u8Power = u8PowTemp>0 ? u8Power+1 : u8Power ;
+						u8Power = u8PowTemp>0 ? u8Power+1 : u8Power;
 						if( u8Power > 4 ){
 							u8Power = 0;
 						}
 					}else{
 						if(bFaceUp){
 							if( u8Power < 4 ){
-								u8Power = u8PowTemp>0 ? u8Power+1 : u8Power ;
+								u8Power = u8PowTemp>0 ? u8Power+1 : u8Power;
 							}
 						}else{
 							if( u8Power > 0 ){
-								u8Power = u8PowTemp>0 ? u8Power-1 : u8Power ;
+								u8Power = u8PowTemp>0 ? u8Power-1 : u8Power;
 							}
 						}
 					}
@@ -945,7 +931,7 @@ static bool_t bSendToSampMonitor( void ){
 			S_OCTET( 0xFF );
 		}
 		else
-		if( (sAppData.sFlash.sData.i16param&SHAKE) != 0 ){
+		if( sAppData.sFlash.sData.i16param&SHAKE ){
 			S_OCTET( 0xFC );
 		}
 		else
@@ -969,8 +955,9 @@ static bool_t bSendToSampMonitor( void ){
 			S_OCTET( ACTIVE );
 		}
 		else{
-		S_OCTET( 0x00 );
+			S_OCTET( 0x00 );
 		}
+
 		u8TmpLength = q-au8Data;
 		memcpy( au8TmpData, au8Data, u8TmpLength );
 	}

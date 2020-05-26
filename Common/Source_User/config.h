@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #ifndef  CONFIG_H_INCLUDED
 #define  CONFIG_H_INCLUDED
@@ -51,7 +36,7 @@ extern "C" {
 #define APP_TWELITE_ID		0x67720102
 #define APP_ID				0x67726305
 
-#define APP_NAME            "Samp_Monitor"
+#define APP_NAME            "App_Tag"
 #define APP_TWELITE_CHANNEL	18
 #define CHANNEL				15
 
@@ -60,19 +45,17 @@ extern "C" {
 #define NEKO_NAME           "Samp_Nekotter"
 
 // リモート設定用
-#define APP_ID_CNFMST       0x67726405
-#define CHANNEL_CNFMST		25
-#define SHORTADDR_CNFMST	0x0F0F
+#define APP_ID_OTA       0x67726405
+#define CHANNEL_OTA		25
+#define SHORTADDR_OTA	0x0F0F
 
 // デフォルトセンサー
-#ifdef TWX0003
-#define DEFAULT_SENSOR		0x31
-#elif LITE2525A
+#ifdef LITE2525A
 #define DEFAULT_SENSOR		0x35
 #elif CNFMST
 #define DEFAULT_SENSOR		0x35
 #elif SWING
-#define DEFAULT_SENSOR		0xFD
+#define DEFAULT_SENSOR		0xFE
 #else
 #define DEFAULT_SENSOR		0x10
 #endif
@@ -113,26 +96,21 @@ extern "C" {
 /*************************************************************************/
 /***        TARGET PCB                                                 ***/
 /*************************************************************************/
-#define DIO_BUTTON (PORT_INPUT1)         // DI1
-#define DIO_VOLTAGE_CHECKER (PORT_OUT1)  // DO1: 始動後速やかに LO になる
-#define DIO_SUPERCAP_CONTROL (PORT_OUT2) // DO2: SUPER CAP の電圧が上昇すると LO に設定
-//#ifdef SWING
-//#define DIO_SNS_POWER (16)        // DO3: センサー制御用(稼働中だけLOになる)
-//#else
-//#define DIO_SNS_POWER (PORT_OUT3)        // DO3: センサー制御用(稼働中だけLOになる)
-//#endif
-
-
-#ifdef LITE2525A
-#define LED (5)
+#ifdef SWING
+#define DIO_BUTTON (0)						// DI1
 #else
-#define LED (0)
+#define DIO_BUTTON (PORT_INPUT1)			// DI1
 #endif
+#define DIO_VOLTAGE_CHECKER (PORT_OUT1)		// DO1: 始動後速やかに LO になる
+#define DIO_SUPERCAP_CONTROL (PORT_OUT2)	// DO2: SUPER CAP の電圧が上昇すると LO に設定
 
-#define PORT_INPUT_MASK ( 1UL << DIO_BUTTON)
+
+#define LED (5)
+
+#define PORT_INPUT_MASK ( 1UL << DIO_BUTTON )
+#define PORT_INPUT_SUBMASK ( 1UL << PORT_INPUT2 )
 #define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON) | (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
 #define PORT_INPUT_MASK_AIRVOLUME ( (1UL << PORT_INPUT2) | (1UL <<  PORT_INPUT3))
-//#define PORT_INPUT_MASK_ADXL345 ( (1UL << DIO_BUTTON ) | (1UL <<  PORT_INPUT3) )
 #define PORT_INPUT_MASK_ACL ( (1UL << PORT_INPUT2 ) | (1UL <<  DIO_BUTTON) )
 
 #ifdef PARENT

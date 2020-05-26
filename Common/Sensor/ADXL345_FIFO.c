@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 /****************************************************************************/
 /***        Include files                                                 ***/
@@ -65,6 +50,7 @@ PRIVATE bool_t bSetFIFO( void );
 /****************************************************************************/
 /***        Local Variables                                               ***/
 /****************************************************************************/
+uint8	u8num;
 
 /****************************************************************************/
 /***        Exported Functions                                            ***/
@@ -82,9 +68,9 @@ bool_t bADXL345_FIFO_Setting()
 {
 	uint8 com;
 //	com = 0x09;		//	50Hz Sampling frequency
-//	com = 0x0A;		//	100Hz Sampling frequency
+	com = 0x0A;		//	100Hz Sampling frequency
 //	com = 0x0B;		//	200Hz Sampling frequency
-	com = 0x0C;		//	400Hz Sampling frequency
+//	com = 0x0C;		//	400Hz Sampling frequency
 //	com = 0x0D;		//	800Hz Sampling frequency
 	bool_t bOk = bSMBusWrite(ADXL345_ADDRESS, ADXL345_BW_RATE, 1, &com );
 
@@ -128,39 +114,34 @@ PUBLIC bool_t bADXL345FIFOreadResult( int16* ai16accelx, int16* ai16accely, int1
 {
 	bool_t	bOk = TRUE;
 	uint8	au8data[6];
-	uint8	num;
 	uint8	i=0;
 
 	//	FIFOでたまった個数を読み込む
 	bOk &= bSMBusWrite(ADXL345_ADDRESS, ADXL345_FIFO_STATUS, 0, NULL );
-	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &num );
+	bOk &= bSMBusSequentialRead( ADXL345_ADDRESS, 1, &u8num );
 
 	//	FIFOの中身を全部読む
-	num = (num&0x7f);
-	if( num >= 14 ){
-		//	各軸の読み込み
-		for( i=0; i<14; i++ ){
-			//	加速度を読み込む
-			//bOk &= bGetAxis( ADXL345_IDX_X, au8data );
-			GetAxis(bOk, au8data);
-			ai16accelx[i] = ((au8data[1] << 8) | au8data[0])<<2;
-			ai16accely[i] = ((au8data[3] << 8) | au8data[2])<<2;
-			ai16accelz[i] = ((au8data[5] << 8) | au8data[4])<<2;
+	u8num = (u8num&0x7f);
+	if( u8num > 14 ){
+		u8num = 14;
+	}
+	//	各軸の読み込み
+	for( i=0; i<u8num; i++ ){
+		//	加速度を読み込む
+		GetAxis(bOk, au8data);
+		ai16accelx[i] = ((au8data[1] << 8) | au8data[0])<<2;
+		ai16accely[i] = ((au8data[3] << 8) | au8data[2])<<2;
+		ai16accelz[i] = ((au8data[5] << 8) | au8data[4])<<2;
 #if 0
-			vfPrintf( &sSerStream, "\n\r%2d:%d,%d,%d", i, ai16accelx[i], ai16accely[i], ai16accelz[i] );
-			SERIAL_vFlush(E_AHI_UART_0);
-		}
+		vfPrintf( &sSerStream, "\n\r%2d:%d,%d,%d", i, ai16accelx[i], ai16accely[i], ai16accelz[i] );
+		SERIAL_vFlush(E_AHI_UART_0);
 	}
 	vfPrintf( &sSerStream, "\n\r%2d", num );
 	SERIAL_vFlush(E_AHI_UART_0);
 	vfPrintf( &sSerStream, "\n\r" );
 #else
-		}
 	}
 #endif
-
-	//	FIFOの設定をもう一度
-	bOk &= bSetFIFO();
 
 	//	終わり
 
@@ -276,6 +257,7 @@ vfPrintf(&sDebugStream, "\n\rADXL345 WAKEUP");
 #endif
 
 			bADXL345FIFOreadResult( pObj->ai16ResultX, pObj->ai16ResultY, pObj->ai16ResultZ);
+			pObj->u8FIFOSample = u8num;
 
 			// data arrival
 			pObj->bBusy = FALSE;

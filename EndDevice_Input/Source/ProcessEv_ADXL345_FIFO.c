@@ -1,21 +1,6 @@
-/****************************************************************************
- * (C) Mono Wireless Inc. - 2016 all rights reserved.
- *
- * Condition to use: (refer to detailed conditions in Japanese)
- *   - The full or part of source code is limited to use for TWE (The
- *     Wireless Engine) as compiled and flash programmed.
- *   - The full or part of source code is prohibited to distribute without
- *     permission from Mono Wireless.
- *
- * 利用条件:
- *   - 本ソースコードは、別途ソースコードライセンス記述が無い限りモノワイヤレスが著作権を
- *     保有しています。
- *   - 本ソースコードは、無保証・無サポートです。本ソースコードや生成物を用いたいかなる損害
- *     についてもモノワイヤレスは保証致しません。不具合等の報告は歓迎いたします。
- *   - 本ソースコードは、モノワイヤレスが販売する TWE シリーズ上で実行する前提で公開
- *     しています。他のマイコン等への移植・流用は一部であっても出来ません。
- *
- ****************************************************************************/
+/* Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.    *
+ * Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE   *
+ * AGREEMENT VERSION 1).                                         */
 
 #include <jendefs.h>
 
@@ -70,8 +55,9 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 
 		vADXL345_FIFO_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
-			V_PRINTF(LB "*** ADXL345 Setting...");
+			V_PRINTF(LB "*** ADXL345 FIFO Setting...");
 			bFirst = FALSE;
+			bADXL345reset();
 			bADXL345_FIFO_Setting();
 		}
 		vSnsObj_Process(&sSnsObj, E_ORDER_KICK);
@@ -145,8 +131,8 @@ PRSEV_HANDLER_DEF(E_STATE_APP_WAIT_TX, tsEvent *pEv, teEvent eEvent, uint32 u32e
 			S_BE_WORD(sObjADXL345.ai16ResultY[0]);
 			S_BE_WORD(sObjADXL345.ai16ResultZ[0]);
 			S_OCTET( 0xFA );
-			S_OCTET( 14 );
-			for( i=1; i<14; i++ ){
+			S_OCTET( sObjADXL345.u8FIFOSample );
+			for( i=1; i<=sObjADXL345.u8FIFOSample; i++ ){
 				S_BE_WORD(sObjADXL345.ai16ResultX[i]);
 				S_BE_WORD(sObjADXL345.ai16ResultY[i]);
 				S_BE_WORD(sObjADXL345.ai16ResultZ[i]);
@@ -394,11 +380,7 @@ static void vProcessADXL345_FIFO(teEvent eEvent) {
 static void vStoreSensorValue() {
 	// センサー値の保管
 	sAppData.sSns.u16Adc1 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_1];
-#ifdef USE_TEMP_INSTDOF_ADC2
-	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_TEMP];
-#else
 	sAppData.sSns.u16Adc2 = sAppData.sObjADC.ai16Result[TEH_ADC_IDX_ADC_2];
-#endif
 	sAppData.sSns.u8Batt = ENCODE_VOLT(sAppData.sObjADC.ai16Result[TEH_ADC_IDX_VOLT]);
 
 	// ADC1 が 1300mV 以上(SuperCAP が 2600mV 以上)である場合は SUPER CAP の直結を有効にする

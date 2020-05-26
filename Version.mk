@@ -1,7 +1,15 @@
-VERSION_MAIN = 1
-VERSION_SUB  = 6
-VERSION_VAR  = 3
+##########################################################################
+# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT VERSION 1).
+##########################################################################
 
+VERSION_MAIN = 2
+VERSION_SUB  = 0
+VERSION_VAR  = 1
+
+# 2.0.1 Routerの接続先指定をできるように変更
+# 2.0.0 プロジェクト名の変更
 # 1.6.3 TWE-EH-SWINGに対応
 # 1.6.2 ADXL34xのFIFOモードの追加
 # 1.6.1 ADXL345のAirVolumeとLowEnergyモードの番号を変更

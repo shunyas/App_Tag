@@ -1,8 +1,10 @@
 ##########################################################################
-#  * (C) Tokyo Cosmos Electric, Inc. (TOCOS) - 2013 all rights reserved.
+# Copyright (C) 2016 Mono Wireless Inc. All Rights Reserved.
+# Released under MW-SLA-1J/1E (MONO WIRELESS SOFTWARE LICENSE
+# AGREEMENT VERSION 1).
 #
-# TOCOS MAKEFILE TEMPLATE (for ToCoNet application build)
-# ToCoNet のアプリケーションを作成するための Makefile です。
+# MONOWIRELESS MAKEFILE TEMPLATE (for TWE-NET application build)
+# TWE-NET のアプリケーションを作成するための Makefile です。
 #
 # ディレクトリに格納され使用します（サンプルアプリ参照）
 #  {SDKROOT}/ToCoNet/{ApplicationRoot}/{FirmwareType}/Build/
@@ -13,8 +15,7 @@
 # チップの選択を行います。指定が無い場合は、外部指定または chipsel.mkの規
 # 定値となります。この変数はファイル名やフォルダ名の決定にも使用されます。
 #
-#TWE_CHIP_MODEL ?= JN5148 # for TWE-001,001STRONG (JN5148) 
-#TWE_CHIP_MODEL ?= JN5164 # for TWE-001Lite (JN5164)
+#TWE_CHIP_MODEL ?= JN5164
 #
 # また TARGET_DIR に .. 、PROJNAME に ../.. のディレクトリ名を格納します。
 #
