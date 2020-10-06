@@ -1,13 +1,14 @@
 ##########################################################################
-# Copyright (C) 2017 Mono Wireless Inc. All Rights Reserved.
+# Copyright (C) 2017-2020 Mono Wireless Inc. All Rights Reserved.
 # Released under MW-SLA-*J,*E (MONO WIRELESS SOFTWARE LICENSE
 # AGREEMENT).
 ##########################################################################
 
 VERSION_MAIN = 2
 VERSION_SUB  = 2
-VERSION_VAR  = 1
+VERSION_VAR  = 2
 
+# 2.2.2 BME280の計算式の問題を修正
 # 2.2.1 細かいバグの修正
 # 2.2.0 ビルドライブラリの更新
 # 2.1.5 親機の出力形式にカンマ区切りを追加

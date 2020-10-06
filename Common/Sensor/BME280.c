@@ -264,11 +264,11 @@ PRIVATE bool_t bReadTrim()
 	dig_P8 = au8data[21]<<8 | au8data[20];
 	dig_P9 = au8data[23]<<8 | au8data[22];
 
-	dig_H1 = au8data[24];
-	dig_H2 = au8data[26]<<8 | au8data[25];
-	dig_H3 = au8data[27];
-	dig_H4 = au8data[28]<<4 | (au8data[29]&0x0F);
-	dig_H5 = au8data[30]<<4 | ((au8data[31]&0xF0)>>4);
+	dig_H1 = au8data[25];
+	dig_H2 = au8data[27]<<8 | au8data[26];
+	dig_H3 = au8data[28];
+	dig_H4 = au8data[29]<<4 | (au8data[30]&0x0F);
+	dig_H5 = au8data[30]>>4 | (au8data[31]<<4);
 	dig_H6 = au8data[32];
 
 	return bOk;
