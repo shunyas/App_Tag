@@ -60,6 +60,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 		// センサーがらみの変数の初期化
 		u8sns_cmplt = 0;
 
+/*
 		// SWがLowになっていたらスリープする
 		if( bPortRead(DIO_BUTTON) ){
 			bPoweroff = TRUE;
@@ -75,6 +76,7 @@ PRSEV_HANDLER_DEF(E_STATE_IDLE, tsEvent *pEv, teEvent eEvent, uint32 u32evarg) {
 			V_PRINTF(LB "*** POWERON");
 			bPoweroff = FALSE;
 		}
+*/
 
 		vADXL345_FIFO_Init( &sObjADXL345, &sSnsObj );
 		if( bFirst ){
