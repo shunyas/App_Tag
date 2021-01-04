@@ -75,12 +75,12 @@ void vTSL2561_Init(tsObjData_TSL2561 *pData, tsSnsObj *pSnsObj) {
 
 	memset((void*)pData, 0, sizeof(tsObjData_TSL2561));
 
-	// INTEG 13ms
-	uint8 opt = (GAIN_16X<<4) | INTG_13MS;
-	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x01, 1, &opt );
-
-	opt = 0x03;
+	uint8 opt = 0x03;
 	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x00, 1, &opt );
+
+	// INTEG 13ms
+	opt = (GAIN_16X<<4) | INTG_13MS;
+	bSMBusWrite(TSL2561_ADDRESS, CMD | 0x01, 1, &opt );
 }
 
 void vTSL2561_Final(tsObjData_TSL2561 *pData, tsSnsObj *pSnsObj) {
